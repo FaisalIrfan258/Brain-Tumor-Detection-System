@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Brain Tumor Classification with GradCAM</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #2c3e50, #3498db);
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            font-weight: 300;
+        }
+
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .upload-section {
+            padding: 40px;
+            text-align: center;
+        }
+
+        .upload-area {
+            border: 3px dashed #3498db;
+            border-radius: 15px;
+            padding: 60px 40px;
+            background: #f8f9fa;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .upload-area:hover {
+            border-color: #2980b9;
+            background: #ecf0f1;
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+        }
+
+        .upload-area.dragover {
+            border-color: #27ae60;
+            background: #d5f4e6;
+        }
+
+        .upload-icon {
+            font-size: 4em;
+            color: #3498db;
+            margin-bottom: 20px;
+        }
+
+        .upload-text {
+            font-size: 1.3em;
+            color: #2c3e50;
+            margin-bottom: 15px;
+        }
+
+        .upload-subtext {
+            color: #7f8c8d;
+            font-size: 0.9em;
+        }
+
+        #fileInput {
+            display: none;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #3498db, #2980b9);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 25px;
+            font-size: 1.1em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 20px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(52, 152, 219, 0.3);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 40px;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .results {
+            display: none;
+            padding: 40px;
+        }
+
+        .prediction-header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .prediction-result {
+            display: inline-block;
+            padding: 15px 30px;
+            border-radius: 25px;
+            font-size: 1.5em;
+            font-weight: bold;
+            margin: 10px;
+        }
+
+        .tumor {
+            background: linear-gradient(135deg, #e74c3c, #c0392b);
+            color: white;
+        }
+
+        .no-tumor {
+            background: linear-gradient(135deg, #27ae60, #229954);
+            color: white;
+        }
+
+        .confidence {
+            font-size: 1.2em;
+            color: #2c3e50;
+            margin-top: 10px;
+        }
+
+        .visualizations {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            margin-top: 40px;
+        }
+
+        .viz-card {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            transition: transform 0.3s ease;
+        }
+
+        .viz-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .viz-card h3 {
+            background: linear-gradient(135deg, #34495e, #2c3e50);
+            color: white;
+            padding: 20px;
+            margin: 0;
+            text-align: center;
+            font-size: 1.3em;
+        }
+
+        .viz-card img {
+            width: 100%;
+            height: 300px;
+            object-fit: contain;
+            background: #f8f9fa;
+        }
+
+        .viz-description {
+            padding: 20px;
+            color: #2c3e50;
+            line-height: 1.6;
+        }
+
+        .error {
+            background: #e74c3c;
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            text-align: center;
+        }
+
+        .reset-btn {
+            background: linear-gradient(135deg, #95a5a6, #7f8c8d);
+            margin-left: 10px;
+        }
+
+        .selected-files {
+            margin-top: 20px;
+            text-align: left;
+            max-height: 200px;
+            overflow-y: auto;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            border: 1px solid #e0e0e0;
+        }
+
+        .selected-file-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .selected-file-item:last-child {
+            border-bottom: none;
+        }
+
+        .remove-file {
+            color: #e74c3c;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .result-item {
+            margin-bottom: 60px;
+            border-bottom: 2px dashed #e0e0e0;
+            padding-bottom: 40px;
+        }
+
+        .result-item:last-child {
+            border-bottom: none;
+        }
+
+        .result-filename {
+            font-size: 1.4em;
+            color: #2c3e50;
+            margin-bottom: 20px;
+            text-align: center;
+            font-weight: bold;
+        }
+
+        .patient-info {
+            margin-top: 30px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            border: 1px solid #e0e0e0;
+        }
+
+        .patient-info h3 {
+            margin-bottom: 15px;
+            color: #2c3e50;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+
+        .form-group input, .form-group textarea, .form-group select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-family: inherit;
+            font-size: 1em;
+        }
+
+        .form-group textarea {
+            height: 100px;
+            resize: vertical;
+        }
+
+        .form-row {
+            display: flex;
+            gap: 15px;
+        }
+
+        .form-row .form-group {
+            flex: 1;
+        }
+
+        .report-download {
+            text-align: center;
+            margin: 30px 0;
+            padding: 20px;
+            background: #f1f9ff;
+            border-radius: 10px;
+            border: 1px solid #b3e0ff;
+        }
+
+        .download-btn {
+            background: linear-gradient(135deg, #27ae60, #2ecc71);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 25px;
+            font-size: 1.1em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            text-decoration: none;
+        }
+
+        .download-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(46, 204, 113, 0.3);
+        }
+
+        .download-icon {
+            font-size: 1.2em;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                margin: 10px;
+                border-radius: 10px;
+            }
+            
+            .header {
+                padding: 30px 20px;
+            }
+            
+            .header h1 {
+                font-size: 2em;
+            }
+            
+            .upload-section {
+                padding: 30px 20px;
+            }
+            
+            .upload-area {
+                padding: 40px 20px;
+            }
+            
+            .visualizations {
+                grid-template-columns: 1fr;
+                gap: 20px;
+            }
+
+            .form-row {
+                flex-direction: column;
+                gap: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🧠 Brain Tumor Classification</h1>
+            <p>Advanced AI-powered diagnosis with GradCAM visualization</p>
+        </div>
+
+        <div class="upload-section" id="uploadSection">
+            <div class="upload-area" id="uploadArea">
+                <div class="upload-icon">📁</div>
+                <div class="upload-text">Click to upload or drag & drop</div>
+                <div class="upload-subtext">Supports PNG, JPG, JPEG files (max 16MB) - Multiple files allowed</div>
+                <input type="file" id="fileInput" accept=".png,.jpg,.jpeg" multiple />
+            </div>
+            <div id="selectedFiles" class="selected-files" style="display: none;">
+                <h3>Selected Files:</h3>
+                <div id="fileList"></div>
+            </div>
+
+            <div class="patient-info">
+                <h3>Patient Information (Optional)</h3>
+                <p>Fill in patient details for a more comprehensive report</p>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="patientName">Patient Name</label>
+                        <input type="text" id="patientName" placeholder="Enter patient name">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="patientId">Patient ID</label>
+                        <input type="text" id="patientId" placeholder="Enter patient ID">
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="patientAge">Age</label>
+                        <input type="number" id="patientAge" placeholder="Enter age">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="patientGender">Gender</label>
+                        <select id="patientGender">
+                            <option value="">Select gender</option>
+                            <option value="Male">Male</option>
+                            <option value="Female">Female</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="patientNotes">Medical Notes</label>
+                    <textarea id="patientNotes" placeholder="Enter any relevant medical notes or observations"></textarea>
+                </div>
+            </div>
+
+            <button class="btn" id="analyzeBtn" disabled>🔬 Analyze Brain Scans</button>
+        </div>
+
+        <div class="loading" id="loadingSection">
+            <div class="spinner"></div>
+            <h3>Analyzing brain scans...</h3>
+            <p>Please wait while our AI model processes your images</p>
+        </div>
+
+        <div class="results" id="resultsSection">
+            <div id="reportSection" class="report-download" style="display: none;">
+                <h3>Detailed PDF Report Available</h3>
+                <p>A comprehensive report has been generated with all analysis results</p>
+                <a href="#" id="downloadReportBtn" class="download-btn">
+                    <span class="download-icon">📥</span> Download PDF Report
+                </a>
+            </div>
+            
+            <div id="resultsContainer">
+                <!-- Results will be dynamically inserted here -->
+            </div>
+
+            <div style="text-align: center; margin-top: 40px;">
+                <button class="btn reset-btn" id="resetBtn">🔄 Analyze More Images</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const analyzeBtn = document.getElementById('analyzeBtn');
+        const uploadSection = document.getElementById('uploadSection');
+        const loadingSection = document.getElementById('loadingSection');
+        const resultsSection = document.getElementById('resultsSection');
+        const resetBtn = document.getElementById('resetBtn');
+        const selectedFilesSection = document.getElementById('selectedFiles');
+        const fileListContainer = document.getElementById('fileList');
+        const reportSection = document.getElementById('reportSection');
+        const downloadReportBtn = document.getElementById('downloadReportBtn');
+
+        let selectedFiles = [];
+        let currentReportFilename = null;
+
+        // Upload area click handler
+        uploadArea.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        // Drag and drop handlers
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFileSelection(files);
+            }
+        });
+
+        // File input change handler
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFileSelection(e.target.files);
+            }
+        });
+
+        function handleFileSelection(files) {
+            // Validate and add files
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                
+                // Validate file type
+                const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg'];
+                if (!allowedTypes.includes(file.type)) {
+                    alert(`File ${file.name} is not a valid image type. Please select PNG, JPG, or JPEG files.`);
+                    continue;
+                }
+
+                // Validate file size (16MB max)
+                if (file.size > 16 * 1024 * 1024) {
+                    alert(`File ${file.name} is too large. Maximum size is 16MB.`);
+                    continue;
+                }
+
+                // Add file to selected files
+                selectedFiles.push(file);
+            }
+
+            updateFileList();
+            analyzeBtn.disabled = selectedFiles.length === 0;
+            
+            // Update upload area
+            uploadArea.innerHTML = `
+                <div class="upload-icon">✅</div>
+                <div class="upload-text">${selectedFiles.length} file(s) selected</div>
+                <div class="upload-subtext">Click to add more files</div>
+                <input type="file" id="fileInput" accept=".png,.jpg,.jpeg" multiple />
+            `;
+            
+            // Re-attach event listener to new file input
+            document.getElementById('fileInput').addEventListener('change', (e) => {
+                if (e.target.files.length > 0) {
+                    handleFileSelection(e.target.files);
+                }
+            });
+        }
+
+        function updateFileList() {
+            if (selectedFiles.length > 0) {
+                selectedFilesSection.style.display = 'block';
+                fileListContainer.innerHTML = '';
+                
+                selectedFiles.forEach((file, index) => {
+                    const fileItem = document.createElement('div');
+                    fileItem.className = 'selected-file-item';
+                    fileItem.innerHTML = `
+                        <span>${file.name} (${formatFileSize(file.size)})</span>
+                        <span class="remove-file" data-index="${index}">✖</span>
+                    `;
+                    fileListContainer.appendChild(fileItem);
+                });
+                
+                // Add event listeners for remove buttons
+                document.querySelectorAll('.remove-file').forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        const index = parseInt(this.getAttribute('data-index'));
+                        selectedFiles.splice(index, 1);
+                        updateFileList();
+                        analyzeBtn.disabled = selectedFiles.length === 0;
+                        
+                        // Update upload area text
+                        if (selectedFiles.length === 0) {
+                            uploadArea.innerHTML = `
+                                <div class="upload-icon">📁</div>
+                                <div class="upload-text">Click to upload or drag & drop</div>
+                                <div class="upload-subtext">Supports PNG, JPG, JPEG files (max 16MB) - Multiple files allowed</div>
+                                <input type="file" id="fileInput" accept=".png,.jpg,.jpeg" multiple />
+                            `;
+                            
+                            // Re-attach event listener
+                            document.getElementById('fileInput').addEventListener('change', (e) => {
+                                if (e.target.files.length > 0) {
+                                    handleFileSelection(e.target.files);
+                                }
+                            });
+                            
+                            selectedFilesSection.style.display = 'none';
+                        } else {
+                            uploadArea.querySelector('.upload-text').textContent = `${selectedFiles.length} file(s) selected`;
+                        }
+                    });
+                });
+            } else {
+                selectedFilesSection.style.display = 'none';
+            }
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            else if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+            else return (bytes / 1048576).toFixed(1) + ' MB';
+        }
+
+        function getPatientInfo() {
+            return {
+                name: document.getElementById('patientName').value,
+                id: document.getElementById('patientId').value,
+                age: document.getElementById('patientAge').value,
+                gender: document.getElementById('patientGender').value,
+                notes: document.getElementById('patientNotes').value
+            };
+        }
+
+        // Analyze button click handler
+        analyzeBtn.addEventListener('click', () => {
+            if (selectedFiles.length === 0) return;
+
+            const formData = new FormData();
+            selectedFiles.forEach(file => {
+                formData.append('file', file);
+            });
+
+            // Add patient information if provided
+            const patientInfo = getPatientInfo();
+            if (patientInfo.name || patientInfo.id || patientInfo.age || patientInfo.gender || patientInfo.notes) {
+                formData.append('patientInfo', JSON.stringify(patientInfo));
+            }
+
+            // Show loading state
+            uploadSection.style.display = 'none';
+            loadingSection.style.display = 'block';
+            resultsSection.style.display = 'none';
+            reportSection.style.display = 'none';
+
+            // Send request to server
+            fetch('/predict', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                loadingSection.style.display = 'none';
+                
+                if (data.results && data.results.length > 0) {
+                    displayMultipleResults(data.results);
+                    
+                    // Handle PDF report
+                    if (data.report_available && data.report_filename) {
+                        currentReportFilename = data.report_filename;
+                        reportSection.style.display = 'block';
+                        downloadReportBtn.href = `/download_report/${data.report_filename}`;
+                    } else {
+                        reportSection.style.display = 'none';
+                    }
+                } else {
+                    displayError('No results returned from the server.');
+                }
+            })
+            .catch(error => {
+                loadingSection.style.display = 'none';
+                displayError('Network error: ' + error.message);
+            });
+        });
+
+        function displayMultipleResults(results) {
+            const resultsContainer = document.getElementById('resultsContainer');
+            resultsContainer.innerHTML = '';
+            
+            results.forEach(result => {
+                if (result.success) {
+                    const resultElement = document.createElement('div');
+                    resultElement.className = 'result-item';
+                    
+                    resultElement.innerHTML = `
+                        <div class="result-filename">${result.filename}</div>
+                        <div class="prediction-header">
+                            <div class="prediction-result ${result.prediction.toLowerCase().replace(' ', '-')}">
+                                ${result.prediction}
+                            </div>
+                            <div class="confidence">
+                                Confidence: ${result.confidence} | Probability: ${result.probability}
+                            </div>
+                        </div>
+                        <div class="visualizations">
+                            <div class="viz-card">
+                                <h3>📷 Original Image</h3>
+                                <img src="data:image/png;base64,${result.original_image}" alt="Original brain scan" />
+                                <div class="viz-description">
+                                    The original brain scan image as uploaded by you.
+                                </div>
+                            </div>
+                            <div class="viz-card">
+                                <h3>🔥 GradCAM Heatmap</h3>
+                                <img src="data:image/png;base64,${result.heatmap}" alt="GradCAM heatmap" />
+                                <div class="viz-description">
+                                    Areas in red/yellow show regions the AI model focused on when making its decision. Warmer colors indicate higher importance.
+                                </div>
+                            </div>
+                            <div class="viz-card">
+                                <h3>🔍 Overlay Visualization</h3>
+                                <img src="data:image/png;base64,${result.overlay}" alt="Overlay visualization" />
+                                <div class="viz-description">
+                                    Combined view showing the original image with the attention heatmap overlaid, highlighting the AI's focus areas.
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    
+                    resultsContainer.appendChild(resultElement);
+                } else {
+                    const errorElement = document.createElement('div');
+                    errorElement.className = 'result-item';
+                    errorElement.innerHTML = `
+                        <div class="result-filename">${result.filename}</div>
+                        <div class="error">Error: ${result.error}</div>
+                    `;
+                    resultsContainer.appendChild(errorElement);
+                }
+            });
+            
+            resultsSection.style.display = 'block';
+        }
+
+        function displayError(errorMessage) {
+            uploadSection.style.display = 'block';
+            uploadSection.innerHTML += `<div class="error">Error: ${errorMessage}</div>`;
+        }
+
+        // Reset button handler
+        resetBtn.addEventListener('click', () => {
+            selectedFiles = [];
+            analyzeBtn.disabled = true;
+            currentReportFilename = null;
+            
+            uploadSection.style.display = 'block';
+            loadingSection.style.display = 'none';
+            resultsSection.style.display = 'none';
+            selectedFilesSection.style.display = 'none';
+            reportSection.style.display = 'none';
+            
+            // Reset upload area
+            uploadArea.innerHTML = `
+                <div class="upload-icon">📁</div>
+                <div class="upload-text">Click to upload or drag & drop</div>
+                <div class="upload-subtext">Supports PNG, JPG, JPEG files (max 16MB) - Multiple files allowed</div>
+                <input type="file" id="fileInput" accept=".png,.jpg,.jpeg" multiple />
+            `;
+            
+            // Reset patient info fields
+            document.getElementById('patientName').value = '';
+            document.getElementById('patientId').value = '';
+            document.getElementById('patientAge').value = '';
+            document.getElementById('patientGender').value = '';
+            document.getElementById('patientNotes').value = '';
+            
+            // Re-attach event listener to new file input
+            document.getElementById('fileInput').addEventListener('change', (e) => {
+                if (e.target.files.length > 0) {
+                    handleFileSelection(e.target.files);
+                }
+            });
+        });
+    </script>
+</body>
+</html>
