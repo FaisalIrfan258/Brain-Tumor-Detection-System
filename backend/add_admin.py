@@ -21,6 +21,11 @@ def add_admin_user():
         'password': os.getenv('DB_PASSWORD', 'admin123')
     }
     
+    # Add SSL mode for Neon
+    ssl_mode = os.getenv('DB_SSL_MODE')
+    if ssl_mode:
+        db_params['sslmode'] = ssl_mode
+    
     try:
         # Connect to database
         conn = psycopg2.connect(**db_params)

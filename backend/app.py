@@ -8,6 +8,8 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from dotenv import load_dotenv
 from database import db
+from cloudinary_service import cloudinary_service
+from psycopg2.extras import RealDictCursor
 import torch
 import torch.nn as nn
 import torchvision.models as models
@@ -44,12 +46,10 @@ CORS(app, resources={
     }
 })
 
-app.config['UPLOAD_FOLDER'] = os.getenv('UPLOAD_FOLDER', 'uploads')
 app.config['REPORT_FOLDER'] = os.getenv('REPORT_FOLDER', 'reports')
 app.config['MAX_CONTENT_LENGTH'] = int(os.getenv('MAX_CONTENT_LENGTH', 16777216))
 
 # Create necessary directories
-os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs(app.config['REPORT_FOLDER'], exist_ok=True)
 
 # Device configuration
@@ -240,27 +240,48 @@ def predict_with_gradcam(image_path):
         overlay = original_array.copy()
         overlay = cv2.addWeighted(overlay, 0.6, heatmap, 0.4, 0)
         
-        # Save images
+        # Save images temporarily and upload to Cloudinary
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        original_path = os.path.join(app.config['UPLOAD_FOLDER'], f"original_{timestamp}.png")
-        heatmap_path = os.path.join(app.config['UPLOAD_FOLDER'], f"heatmap_{timestamp}.png")
-        overlay_path = os.path.join(app.config['UPLOAD_FOLDER'], f"overlay_{timestamp}.png")
+        temp_dir = "temp_uploads"
+        os.makedirs(temp_dir, exist_ok=True)
+        temp_original_path = os.path.join(temp_dir, f"temp_original_{timestamp}.png")
+        temp_heatmap_path = os.path.join(temp_dir, f"temp_heatmap_{timestamp}.png")
+        temp_overlay_path = os.path.join(temp_dir, f"temp_overlay_{timestamp}.png")
         
-        Image.fromarray(original_array.astype(np.uint8)).save(original_path)
-        Image.fromarray(heatmap.astype(np.uint8)).save(heatmap_path)
-        Image.fromarray(overlay.astype(np.uint8)).save(overlay_path)
+        Image.fromarray(original_array.astype(np.uint8)).save(temp_original_path)
+        Image.fromarray(heatmap.astype(np.uint8)).save(temp_heatmap_path)
+        Image.fromarray(overlay.astype(np.uint8)).save(temp_overlay_path)
         
-        # Clean up
+        # Upload to Cloudinary
+        original_upload = cloudinary_service.upload_image(temp_original_path, folder="brain_tumor_scans/original")
+        heatmap_upload = cloudinary_service.upload_image(temp_heatmap_path, folder="brain_tumor_scans/heatmap")
+        overlay_upload = cloudinary_service.upload_image(temp_overlay_path, folder="brain_tumor_scans/overlay")
+        
+        # Clean up temporary files
+        os.remove(temp_original_path)
+        os.remove(temp_heatmap_path)
+        os.remove(temp_overlay_path)
+        
+        # Clean up GradCAM
         gradcam.remove_hooks()
+        
+        if not all([original_upload['success'], heatmap_upload['success'], overlay_upload['success']]):
+            return {
+                'success': False,
+                'error': 'Failed to upload images to Cloudinary'
+            }
         
         return {
             'success': True,
             'prediction': 'Tumor' if prediction == 1 else 'No Tumor',
             'confidence': float(confidence),
             'probability': float(probability),
-            'original_path': original_path,
-            'heatmap_path': heatmap_path,
-            'overlay_path': overlay_path
+            'original_path': original_upload['url'],
+            'heatmap_path': heatmap_upload['url'],
+            'overlay_path': overlay_upload['url'],
+            'original_public_id': original_upload['public_id'],
+            'heatmap_public_id': heatmap_upload['public_id'],
+            'overlay_public_id': overlay_upload['public_id']
         }
         
     except Exception as e:
@@ -369,15 +390,25 @@ def generate_pdf_report(patient_info, scans_data):
             elements.append(Paragraph(f"Probability: {probability}", styles['Normal']))
             elements.append(Spacer(1, 0.1*inch))
             
-            # Add images if available
-            if scan.get('original_path') and os.path.exists(scan['original_path']):
+            # Add images if available (now using Cloudinary URLs)
+            if scan.get('original_path'):
                 img_width = 2*inch
                 img_height = 2*inch
                 
                 try:
-                    original_img = RLImage(scan['original_path'], width=img_width, height=img_height)
-                    heatmap_img = RLImage(scan['heatmap_path'], width=img_width, height=img_height)
-                    overlay_img = RLImage(scan['overlay_path'], width=img_width, height=img_height)
+                    # For Cloudinary URLs, we need to download them temporarily
+                    import requests
+                    from io import BytesIO
+                    
+                    # Download images from Cloudinary
+                    original_response = requests.get(scan['original_path'])
+                    heatmap_response = requests.get(scan['heatmap_path'])
+                    overlay_response = requests.get(scan['overlay_path'])
+                    
+                    if original_response.status_code == 200 and heatmap_response.status_code == 200 and overlay_response.status_code == 200:
+                        original_img = RLImage(BytesIO(original_response.content), width=img_width, height=img_height)
+                        heatmap_img = RLImage(BytesIO(heatmap_response.content), width=img_width, height=img_height)
+                        overlay_img = RLImage(BytesIO(overlay_response.content), width=img_width, height=img_height)
                     
                     # Create table with images
                     image_data = [
@@ -408,7 +439,14 @@ def generate_pdf_report(patient_info, scans_data):
         # Build the PDF
         doc.build(elements)
         
-        return report_path
+        # Store PDF locally in reports folder
+        pdf_result = cloudinary_service.upload_pdf(report_path, folder="brain_tumor_reports")
+        
+        if not pdf_result['success']:
+            print(f"Error storing PDF: {pdf_result['error']}")
+            return None
+        
+        return pdf_result['url']
         
     except Exception as e:
         print(f"Error generating PDF: {str(e)}")
@@ -495,12 +533,17 @@ def admin_login():
         username = data.get('username')
         password = data.get('password')
         
+        print(f"🔍 Admin login attempt - Username: {username}")
+        
         if not username or not password:
             return jsonify({'success': False, 'error': 'Username and password are required'})
         
         admin = db.get_admin_by_credentials(username, password)
         
+        print(f"🔍 Admin lookup result: {admin is not None}")
+        
         if admin:
+            print(f"✅ Admin login successful for: {username}")
             return jsonify({
                 'success': True,
                 'data': {
@@ -510,9 +553,11 @@ def admin_login():
                 }
             })
         else:
+            print(f"❌ Admin login failed for: {username}")
             return jsonify({'success': False, 'error': 'Invalid credentials'})
             
     except Exception as e:
+        print(f"❌ Admin login error: {str(e)}")
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/admin/patients/<int:patient_id>', methods=['GET'])
@@ -678,14 +723,22 @@ def upload_scan_admin():
         
         for file in files:
             if file and allowed_file(file.filename):
-                # Save uploaded file
+                # Save uploaded file to temporary directory
                 filename = secure_filename(file.filename)
                 unique_filename = f"{uuid.uuid4()}_{filename}"
-                filepath = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
+                temp_dir = "temp_uploads"
+                os.makedirs(temp_dir, exist_ok=True)
+                filepath = os.path.join(temp_dir, unique_filename)
                 file.save(filepath)
                 
                 # Analyze the image
                 result = predict_with_gradcam(filepath)
+                
+                # Clean up temporary file
+                try:
+                    os.remove(filepath)
+                except:
+                    pass
                 
                 if result['success']:
                     # Save to database
@@ -732,10 +785,49 @@ def upload_scan_admin():
                     'error': 'Invalid file type'
                 })
         
+        # After successful scans, generate a report
+        report_data = None
+        if results and any(r['success'] for r in results):
+            try:
+                # Get patient information
+                patient = db.get_patient_by_id(int(patient_id))
+                if patient:
+                    # Get all patient scans
+                    all_scans = db.get_patient_scans(int(patient_id))
+                    if all_scans:
+                        # Generate PDF report
+                        report_path = generate_pdf_report(patient, all_scans)
+                        
+                        if report_path:
+                            # Save report to database
+                            tumor_count = sum(1 for s in all_scans if s['prediction'] == 'Tumor')
+                            no_tumor_count = sum(1 for s in all_scans if s['prediction'] == 'No Tumor')
+                            
+                            report_result = db.add_report(
+                                patient_id=int(patient_id),
+                                report_path=report_path,
+                                scan_count=len(all_scans),
+                                tumor_count=tumor_count,
+                                no_tumor_count=no_tumor_count
+                            )
+                            
+                            if report_result:
+                                report_data = {
+                                    'report_id': report_result['report_id'],
+                                    'report_url': report_path,
+                                    'scan_count': len(all_scans),
+                                    'tumor_count': tumor_count,
+                                    'no_tumor_count': no_tumor_count
+                                }
+            except Exception as e:
+                print(f"Error generating report: {e}")
+        
         return jsonify({
             'success': True,
             'scan_ids': scan_ids,
-            'results': results
+            'results': results,
+            'report_generated': report_data is not None,
+            'report_data': report_data
         })
             
     except Exception as e:
@@ -767,14 +859,22 @@ def upload_scan():
             return jsonify({'success': False, 'error': 'No file selected'})
         
         if file and allowed_file(file.filename):
-            # Save uploaded file
+            # Save uploaded file to temporary directory
             filename = secure_filename(file.filename)
             unique_filename = f"{uuid.uuid4()}_{filename}"
-            filepath = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
+            temp_dir = "temp_uploads"
+            os.makedirs(temp_dir, exist_ok=True)
+            filepath = os.path.join(temp_dir, unique_filename)
             file.save(filepath)
             
             # Analyze the image
             result = predict_with_gradcam(filepath)
+            
+            # Clean up temporary file
+            try:
+                os.remove(filepath)
+            except:
+                pass
             
             if result['success']:
                 # Save to database
@@ -816,26 +916,39 @@ def generate_report():
         data = request.json
         patient_id = data.get('patient_id')
         
+        print(f"🔍 Generating report for patient ID: {patient_id}")
+        
         if not patient_id:
             return jsonify({'success': False, 'error': 'Patient ID is required'})
         
         # Get patient information
         patient = db.get_patient_by_id(patient_id)
         if not patient:
+            print(f"❌ Patient not found: {patient_id}")
             return jsonify({'success': False, 'error': 'Patient not found'})
+        
+        print(f"✅ Patient found: {patient['name']}")
         
         # Get patient scans
         scans = db.get_patient_scans(patient_id)
         if not scans:
+            print(f"❌ No scans found for patient: {patient_id}")
             return jsonify({'success': False, 'error': 'No scans found for patient'})
         
+        print(f"✅ Found {len(scans)} scans for patient")
+        
         # Generate PDF report
+        print("📄 Generating PDF report...")
         report_path = generate_pdf_report(patient, scans)
         
         if report_path:
+            print(f"✅ PDF report generated: {report_path}")
+            
             # Save report to database
             tumor_count = sum(1 for s in scans if s['prediction'] == 'Tumor')
             no_tumor_count = sum(1 for s in scans if s['prediction'] == 'No Tumor')
+            
+            print(f"📊 Stats - Total: {len(scans)}, Tumors: {tumor_count}, No Tumors: {no_tumor_count}")
             
             report_result = db.add_report(
                 patient_id=patient_id,
@@ -846,6 +959,7 @@ def generate_report():
             )
             
             if report_result:
+                print(f"✅ Report saved to database: {report_result['report_id']}")
                 return jsonify({
                     'success': True,
                     'data': {
@@ -854,24 +968,58 @@ def generate_report():
                     }
                 })
             else:
+                print("❌ Failed to save report to database")
                 return jsonify({'success': False, 'error': 'Failed to save report to database'})
         else:
+            print("❌ Failed to generate PDF report")
             return jsonify({'success': False, 'error': 'Failed to generate PDF report'})
+            
+    except Exception as e:
+        print(f"❌ Report generation error: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/report/download/<report_id>')
+def download_report(report_id):
+    """Get report download URL"""
+    try:
+        # Get report from database
+        cursor = db.connection.cursor(cursor_factory=RealDictCursor)
+        cursor.execute("SELECT report_path FROM reports WHERE report_id = %s", (report_id,))
+        report = cursor.fetchone()
+        cursor.close()
+        
+        if not report:
+            return jsonify({'success': False, 'error': 'Report not found'})
+        
+        # Return the report URL for download
+        return jsonify({
+            'success': True,
+            'download_url': report['report_path']
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/report/file/<filename>')
+def serve_report_file(filename):
+    """Serve PDF report files"""
+    try:
+        # Security check - only allow PDF files
+        if not filename.endswith('.pdf'):
+            return jsonify({'success': False, 'error': 'Invalid file type'})
+        
+        # Get the file path
+        file_path = os.path.join(app.config['REPORT_FOLDER'], filename)
+        
+        if os.path.exists(file_path):
+            return send_file(file_path, as_attachment=True, download_name=filename)
+        else:
+            return jsonify({'success': False, 'error': 'Report file not found'})
             
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
-@app.route('/api/report/download/<filename>')
-def download_report(filename):
-    """Download a report file"""
-    try:
-        report_path = os.path.join(app.config['REPORT_FOLDER'], filename)
-        if os.path.exists(report_path):
-            return send_file(report_path, as_attachment=True)
-        else:
-            return jsonify({'success': False, 'error': 'Report not found'})
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)})
+
 
 def allowed_file(filename):
     ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}

@@ -198,6 +198,7 @@ logs/
 *.tmp
 *.temp
 temp/
+temp_uploads/
 
 # OS generated files
 .DS_Store

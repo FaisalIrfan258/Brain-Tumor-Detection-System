@@ -17,16 +17,51 @@ class Database:
     
     def connect(self):
         try:
-            self.connection = psycopg2.connect(
-                host=os.getenv('DB_HOST', 'localhost'),
-                database=os.getenv('DB_NAME', 'brain_tumor_system'),
-                user=os.getenv('DB_USER', 'postgres'),
-                password=os.getenv('DB_PASSWORD', ''),
-                port=os.getenv('DB_PORT', '5432')
-            )
+            # Check if we're using Neon (SSL required)
+            ssl_mode = os.getenv('DB_SSL_MODE')
+            
+            if ssl_mode:
+                # Neon database connection with SSL and connection pooling
+                self.connection = psycopg2.connect(
+                    host=os.getenv('DB_HOST', 'localhost'),
+                    database=os.getenv('DB_NAME', 'brain_tumor_system'),
+                    user=os.getenv('DB_USER', 'postgres'),
+                    password=os.getenv('DB_PASSWORD', ''),
+                    port=os.getenv('DB_PORT', '5432'),
+                    sslmode=ssl_mode,
+                    # Connection pooling settings for Neon
+                    keepalives_idle=30,
+                    keepalives_interval=10,
+                    keepalives_count=5
+                )
+            else:
+                # Local database connection
+                self.connection = psycopg2.connect(
+                    host=os.getenv('DB_HOST', 'localhost'),
+                    database=os.getenv('DB_NAME', 'brain_tumor_system'),
+                    user=os.getenv('DB_USER', 'postgres'),
+                    password=os.getenv('DB_PASSWORD', ''),
+                    port=os.getenv('DB_PORT', '5432')
+                )
+            
             print("Database connected successfully!")
         except Exception as e:
             print(f"Database connection error: {e}")
+    
+    def ensure_connection(self):
+        """Ensure database connection is active, reconnect if needed"""
+        try:
+            if self.connection is None or self.connection.closed:
+                print("Reconnecting to database...")
+                self.connect()
+            else:
+                # Test the connection
+                cursor = self.connection.cursor()
+                cursor.execute("SELECT 1")
+                cursor.close()
+        except Exception as e:
+            print(f"Connection test failed, reconnecting: {e}")
+            self.connect()
     
     def create_tables(self):
         try:
@@ -118,6 +153,9 @@ class Database:
     def add_patient(self, name, email, age=None, gender=None, phone=None, address=None):
         """Add a new patient to the database"""
         try:
+            # Ensure connection is active
+            self.ensure_connection()
+            
             cursor = self.connection.cursor(cursor_factory=RealDictCursor)
             
             # Generate unique patient ID
@@ -153,7 +191,14 @@ class Database:
             
         except Exception as e:
             print(f"Error adding patient: {e}")
-            return None
+            # Try to reconnect and retry once
+            try:
+                print("Attempting to reconnect and retry...")
+                self.connect()
+                return self.add_patient(name, email, age, gender, phone, address)
+            except Exception as retry_error:
+                print(f"Retry failed: {retry_error}")
+                return None
     
     def get_patient_by_credentials(self, username, password):
         """Authenticate patient login"""
@@ -195,6 +240,9 @@ class Database:
     def get_all_patients(self):
         """Get all patients"""
         try:
+            # Ensure connection is active
+            self.ensure_connection()
+            
             cursor = self.connection.cursor(cursor_factory=RealDictCursor)
             
             cursor.execute("""
@@ -208,12 +256,23 @@ class Database:
             
         except Exception as e:
             print(f"Error getting patients: {e}")
-            return []
+            # Try to reconnect and retry once
+            try:
+                print("Attempting to reconnect and retry get patients...")
+                self.connect()
+                return self.get_all_patients()
+            except Exception as retry_error:
+                print(f"Retry failed: {retry_error}")
+                return []
     
     def add_scan(self, patient_id, original_filename, original_path, heatmap_path, overlay_path, 
-                 prediction, confidence, probability, report_path=None):
+                 prediction, confidence, probability, report_path=None, original_public_id=None, 
+                 heatmap_public_id=None, overlay_public_id=None):
         """Add a new scan record"""
         try:
+            # Ensure connection is active
+            self.ensure_connection()
+            
             cursor = self.connection.cursor(cursor_factory=RealDictCursor)
             
             # Generate unique scan ID
@@ -235,7 +294,16 @@ class Database:
             
         except Exception as e:
             print(f"Error adding scan: {e}")
-            return None
+            # Try to reconnect and retry once
+            try:
+                print("Attempting to reconnect and retry add scan...")
+                self.connect()
+                return self.add_scan(patient_id, original_filename, original_path, heatmap_path, 
+                                   overlay_path, prediction, confidence, probability, report_path,
+                                   original_public_id, heatmap_public_id, overlay_public_id)
+            except Exception as retry_error:
+                print(f"Retry failed: {retry_error}")
+                return None
     
     def get_patient_scans(self, patient_id):
         """Get all scans for a patient"""
@@ -258,6 +326,9 @@ class Database:
     def add_report(self, patient_id, report_path, scan_count, tumor_count, no_tumor_count):
         """Add a new report record"""
         try:
+            # Ensure connection is active
+            self.ensure_connection()
+            
             cursor = self.connection.cursor(cursor_factory=RealDictCursor)
             
             # Generate unique report ID
@@ -277,7 +348,14 @@ class Database:
             
         except Exception as e:
             print(f"Error adding report: {e}")
-            return None
+            # Try to reconnect and retry once
+            try:
+                print("Attempting to reconnect and retry add report...")
+                self.connect()
+                return self.add_report(patient_id, report_path, scan_count, tumor_count, no_tumor_count)
+            except Exception as retry_error:
+                print(f"Retry failed: {retry_error}")
+                return None
     
     def get_patient_reports(self, patient_id):
         """Get all reports for a patient"""
@@ -300,6 +378,9 @@ class Database:
     def get_dashboard_stats(self):
         """Get dashboard statistics"""
         try:
+            # Ensure connection is active
+            self.ensure_connection()
+            
             cursor = self.connection.cursor(cursor_factory=RealDictCursor)
             
             # Total patients
@@ -339,13 +420,27 @@ class Database:
             
         except Exception as e:
             print(f"Error getting dashboard stats: {e}")
-            return {}
+            # Try to reconnect and retry once
+            try:
+                print("Attempting to reconnect and retry dashboard stats...")
+                self.connect()
+                return self.get_dashboard_stats()
+            except Exception as retry_error:
+                print(f"Retry failed: {retry_error}")
+                return {}
 
     def get_admin_by_credentials(self, username, password):
         """Authenticate admin login"""
         try:
+            # Ensure connection is active
+            self.ensure_connection()
+            
             cursor = self.connection.cursor(cursor_factory=RealDictCursor)
             password_hash = self.hash_password(password)
+            
+            print(f"🔍 Database: Checking admin credentials")
+            print(f"   Username: {username}")
+            print(f"   Password hash: {password_hash}")
             
             cursor.execute("""
                 SELECT * FROM admins WHERE username = %s AND password_hash = %s
@@ -354,11 +449,22 @@ class Database:
             admin = cursor.fetchone()
             cursor.close()
             
+            print(f"🔍 Database: Admin found: {admin is not None}")
+            if admin:
+                print(f"   Admin ID: {admin['id']}")
+            
             return admin
             
         except Exception as e:
             print(f"Error authenticating admin: {e}")
-            return None
+            # Try to reconnect and retry once
+            try:
+                print("Attempting to reconnect and retry admin auth...")
+                self.connect()
+                return self.get_admin_by_credentials(username, password)
+            except Exception as retry_error:
+                print(f"Retry failed: {retry_error}")
+                return None
 
     def get_all_scans(self):
         """Get all scans with patient information"""
