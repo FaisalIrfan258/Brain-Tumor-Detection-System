@@ -130,7 +130,7 @@ class Database:
             cursor.execute("""
                 INSERT INTO patients (patient_id, name, email, age, gender, phone, address, username, password_hash)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                RETURNING id, patient_id, username, password_hash
+                RETURNING id, patient_id, name, email, age, gender, phone, address, username, password_hash, created_at
             """, (patient_id, name, email, age, gender, phone, address, username, password_hash))
             
             result = cursor.fetchone()
@@ -140,9 +140,15 @@ class Database:
             return {
                 'id': result['id'],
                 'patient_id': result['patient_id'],
+                'name': result['name'],
+                'email': result['email'],
+                'age': result['age'],
+                'gender': result['gender'],
+                'phone': result['phone'],
+                'address': result['address'],
                 'username': username,
                 'password': password,
-                'email': email
+                'created_at': result['created_at'].isoformat() if result['created_at'] else None
             }
             
         except Exception as e:
@@ -330,6 +336,67 @@ class Database:
         except Exception as e:
             print(f"Error getting dashboard stats: {e}")
             return {}
+
+    def get_admin_by_credentials(self, username, password):
+        """Authenticate admin login"""
+        try:
+            cursor = self.connection.cursor(cursor_factory=RealDictCursor)
+            password_hash = self.hash_password(password)
+            
+            cursor.execute("""
+                SELECT * FROM admins WHERE username = %s AND password_hash = %s
+            """, (username, password_hash))
+            
+            admin = cursor.fetchone()
+            cursor.close()
+            
+            return admin
+            
+        except Exception as e:
+            print(f"Error authenticating admin: {e}")
+            return None
+
+    def get_all_scans(self):
+        """Get all scans with patient information"""
+        try:
+            cursor = self.connection.cursor(cursor_factory=RealDictCursor)
+            
+            cursor.execute("""
+                SELECT s.*, p.name as patient_name, p.patient_id as patient_identifier
+                FROM scans s
+                JOIN patients p ON s.patient_id = p.id
+                ORDER BY s.created_at DESC
+            """)
+            
+            scans = cursor.fetchall()
+            cursor.close()
+            
+            return scans
+            
+        except Exception as e:
+            print(f"Error getting all scans: {e}")
+            return []
+
+    def get_all_reports(self):
+        """Get all reports with patient information"""
+        try:
+            cursor = self.connection.cursor(cursor_factory=RealDictCursor)
+            
+            cursor.execute("""
+                SELECT r.*, p.name as patient_name, p.patient_id as patient_identifier
+                FROM reports r
+                JOIN patients p ON r.patient_id = p.id
+                ORDER BY r.created_at DESC
+            """)
+            
+            reports = cursor.fetchall()
+            cursor.close()
+            
+            return reports
+            
+        except Exception as e:
+            print(f"Error getting all reports: {e}")
+            return []
     
     def close(self):
         """Close database connection"""
