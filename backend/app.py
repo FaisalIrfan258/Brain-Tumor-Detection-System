@@ -33,7 +33,16 @@ from reportlab.lib.units import inch
 load_dotenv('config.env')
 
 app = Flask(__name__)
-CORS(app)
+
+# Enhanced CORS configuration
+CORS(app, resources={
+    r"/api/*": {
+        "origins": ["http://localhost:3000", "http://127.0.0.1:3000"],
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization", "X-Requested-With"],
+        "supports_credentials": True
+    }
+})
 
 app.config['UPLOAD_FOLDER'] = os.getenv('UPLOAD_FOLDER', 'uploads')
 app.config['REPORT_FOLDER'] = os.getenv('REPORT_FOLDER', 'reports')
@@ -407,6 +416,46 @@ def generate_pdf_report(patient_info, scans_data):
 
 # API Routes
 
+@app.route('/api/admin/login', methods=['OPTIONS'])
+def handle_admin_login_options():
+    """Handle OPTIONS requests for admin login"""
+    response = jsonify({})
+    response.headers.add('Access-Control-Allow-Origin', 'http://localhost:3000')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With')
+    response.headers.add('Access-Control-Allow-Methods', 'POST,OPTIONS')
+    response.headers.add('Access-Control-Allow-Credentials', 'true')
+    return response
+
+@app.route('/api/patient/login', methods=['OPTIONS'])
+def handle_patient_login_options():
+    """Handle OPTIONS requests for patient login"""
+    response = jsonify({})
+    response.headers.add('Access-Control-Allow-Origin', 'http://localhost:3000')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With')
+    response.headers.add('Access-Control-Allow-Methods', 'POST,OPTIONS')
+    response.headers.add('Access-Control-Allow-Credentials', 'true')
+    return response
+
+@app.route('/api/admin/dashboard/stats', methods=['OPTIONS'])
+def handle_dashboard_stats_options():
+    """Handle OPTIONS requests for dashboard stats"""
+    response = jsonify({})
+    response.headers.add('Access-Control-Allow-Origin', 'http://localhost:3000')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,OPTIONS')
+    response.headers.add('Access-Control-Allow-Credentials', 'true')
+    return response
+
+@app.route('/api/<path:path>', methods=['OPTIONS'])
+def handle_general_options(path):
+    """Handle OPTIONS requests for other API routes"""
+    response = jsonify({})
+    response.headers.add('Access-Control-Allow-Origin', 'http://localhost:3000')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS')
+    response.headers.add('Access-Control-Allow-Credentials', 'true')
+    return response
+
 @app.route('/api/health', methods=['GET'])
 def health_check():
     return jsonify({'status': 'healthy', 'message': 'Brain Tumor Detection API is running'})
@@ -420,12 +469,79 @@ def admin_dashboard():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
+@app.route('/api/admin/dashboard/stats', methods=['GET'])
+def admin_dashboard_stats():
+    """Get dashboard statistics (alternative endpoint)"""
+    try:
+        stats = db.get_dashboard_stats()
+        return jsonify({'success': True, 'data': stats})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
 @app.route('/api/admin/patients', methods=['GET'])
 def get_all_patients():
     """Get all patients"""
     try:
         patients = db.get_all_patients()
         return jsonify({'success': True, 'data': patients})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/admin/login', methods=['POST'])
+def admin_login():
+    """Admin login"""
+    try:
+        data = request.json
+        username = data.get('username')
+        password = data.get('password')
+        
+        if not username or not password:
+            return jsonify({'success': False, 'error': 'Username and password are required'})
+        
+        admin = db.get_admin_by_credentials(username, password)
+        
+        if admin:
+            return jsonify({
+                'success': True,
+                'data': {
+                    'id': admin['id'],
+                    'username': admin['username'],
+                    'email': admin['email']
+                }
+            })
+        else:
+            return jsonify({'success': False, 'error': 'Invalid credentials'})
+            
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/admin/patients/<int:patient_id>', methods=['GET'])
+def get_admin_patient_info(patient_id):
+    """Get specific patient info for admin"""
+    try:
+        patient = db.get_patient_by_id(patient_id)
+        if patient:
+            return jsonify({'success': True, 'data': patient})
+        else:
+            return jsonify({'success': False, 'error': 'Patient not found'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/admin/patients/<int:patient_id>/scans', methods=['GET'])
+def get_admin_patient_scans(patient_id):
+    """Get all scans for a specific patient (admin view)"""
+    try:
+        scans = db.get_patient_scans(patient_id)
+        return jsonify({'success': True, 'data': scans})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/admin/patients/<int:patient_id>/reports', methods=['GET'])
+def get_admin_patient_reports(patient_id):
+    """Get all reports for a specific patient (admin view)"""
+    try:
+        reports = db.get_patient_reports(patient_id)
+        return jsonify({'success': True, 'data': reports})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
@@ -516,6 +632,120 @@ def get_patient_reports(patient_id):
     """Get all reports for a patient"""
     try:
         reports = db.get_patient_reports(patient_id)
+        return jsonify({'success': True, 'data': reports})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/patient/<int:patient_id>', methods=['GET'])
+def get_patient_info(patient_id):
+    """Get patient information"""
+    try:
+        patient = db.get_patient_by_id(patient_id)
+        if patient:
+            return jsonify({'success': True, 'data': patient})
+        else:
+            return jsonify({'success': False, 'error': 'Patient not found'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/admin/scans', methods=['GET'])
+def get_all_scans():
+    """Get all scans (admin view)"""
+    try:
+        scans = db.get_all_scans()
+        return jsonify({'success': True, 'data': scans})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/admin/scans/upload', methods=['POST'])
+def upload_scan_admin():
+    """Upload and analyze brain scan (admin endpoint)"""
+    try:
+        if 'files' not in request.files:
+            return jsonify({'success': False, 'error': 'No files uploaded'})
+        
+        files = request.files.getlist('files')
+        patient_id = request.form.get('patient_id')
+        
+        if not patient_id:
+            return jsonify({'success': False, 'error': 'Patient ID is required'})
+        
+        if not files or all(file.filename == '' for file in files):
+            return jsonify({'success': False, 'error': 'No files selected'})
+        
+        results = []
+        scan_ids = []
+        
+        for file in files:
+            if file and allowed_file(file.filename):
+                # Save uploaded file
+                filename = secure_filename(file.filename)
+                unique_filename = f"{uuid.uuid4()}_{filename}"
+                filepath = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
+                file.save(filepath)
+                
+                # Analyze the image
+                result = predict_with_gradcam(filepath)
+                
+                if result['success']:
+                    # Save to database
+                    scan_result = db.add_scan(
+                        patient_id=int(patient_id),
+                        original_filename=filename,
+                        original_path=result['original_path'],
+                        heatmap_path=result['heatmap_path'],
+                        overlay_path=result['overlay_path'],
+                        prediction=result['prediction'],
+                        confidence=result['confidence'],
+                        probability=result['probability']
+                    )
+                    
+                    if scan_result:
+                        scan_ids.append(scan_result['scan_id'])
+                        results.append({
+                            'success': True,
+                            'filename': filename,
+                            'scan_id': scan_result['scan_id'],
+                            'prediction': result['prediction'],
+                            'confidence': result['confidence'],
+                            'probability': result['probability'],
+                            'original_image': result['original_path'],
+                            'heatmap': result['heatmap_path'],
+                            'overlay': result['overlay_path']
+                        })
+                    else:
+                        results.append({
+                            'success': False,
+                            'filename': filename,
+                            'error': 'Failed to save scan to database'
+                        })
+                else:
+                    results.append({
+                        'success': False,
+                        'filename': filename,
+                        'error': result['error']
+                    })
+            else:
+                results.append({
+                    'success': False,
+                    'filename': file.filename if file else 'unknown',
+                    'error': 'Invalid file type'
+                })
+        
+        return jsonify({
+            'success': True,
+            'scan_ids': scan_ids,
+            'results': results
+        })
+            
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/admin/reports', methods=['GET'])
+def get_all_reports():
+    """Get all reports (admin view)"""
+    try:
+        reports = db.get_all_reports()
         return jsonify({'success': True, 'data': reports})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})

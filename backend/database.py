@@ -318,8 +318,8 @@ class Database:
             cursor.execute("""
                 SELECT 
                     COUNT(*) as total_scans,
-                    SUM(CASE WHEN prediction = 'Tumor' THEN 1 ELSE 0 END) as tumor_count,
-                    SUM(CASE WHEN prediction = 'No Tumor' THEN 1 ELSE 0 END) as no_tumor_count
+                    COALESCE(SUM(CASE WHEN prediction = 'Tumor' THEN 1 ELSE 0 END), 0) as tumor_count,
+                    COALESCE(SUM(CASE WHEN prediction = 'No Tumor' THEN 1 ELSE 0 END), 0) as no_tumor_count
                 FROM scans
             """)
             scan_stats = cursor.fetchone()
@@ -327,10 +327,14 @@ class Database:
             cursor.close()
             
             return {
-                'total_patients': total_patients,
-                'total_scans': total_scans,
-                'total_reports': total_reports,
-                'scan_stats': scan_stats
+                'total_patients': total_patients or 0,
+                'total_scans': total_scans or 0,
+                'total_reports': total_reports or 0,
+                'scan_stats': scan_stats or {
+                    'total_scans': 0,
+                    'tumor_count': 0,
+                    'no_tumor_count': 0
+                }
             }
             
         except Exception as e:
