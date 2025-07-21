@@ -120,28 +120,51 @@ npm run dev
 
 The frontend will be available at `http://localhost:3000`
 
-## API Endpoints
+## ☁️ Cloud Integration
+- **Cloudinary** for scan images (only images)
+- **Amazon S3** for PDF report storage and secure download (all reports)
 
-### Admin Endpoints
+## 📊 Report Generation & Download
+- PDF reports are now stored in Amazon S3
+- The backend returns a pre-signed S3 URL for each report download
+- The frontend automatically opens/downloads the S3 URL for the user
 
-- `GET /api/admin/dashboard` - Get dashboard statistics
-- `GET /api/admin/patients` - Get all patients
-- `POST /api/admin/patients` - Add new patient
+---
 
-### Patient Endpoints
+## Environment Configuration (Backend)
 
-- `POST /api/patient/login` - Patient login
-- `GET /api/patient/{id}/scans` - Get patient scans
-- `GET /api/patient/{id}/reports` - Get patient reports
+Add these to your `backend/config.env`:
+```env
+# AWS S3 Configuration
+AWS_ACCESS_KEY_ID=your-access-key
+AWS_SECRET_ACCESS_KEY=your-secret-key
+AWS_REGION=us-east-1
+AWS_S3_BUCKET=your-bucket-name
+```
 
-### Scan Endpoints
+---
 
-- `POST /api/scan/upload` - Upload and analyze brain scan
+## API Endpoints (Reports)
 
-### Report Endpoints
+- `POST /api/report/generate` - Generate PDF report (uploads to S3)
+- `GET /api/report/download-by-filename/{filename}` - Download report (returns pre-signed S3 URL)
 
-- `POST /api/report/generate` - Generate PDF report
-- `GET /api/report/download/{filename}` - Download report
+---
+
+## Security Note
+- **Never commit AWS credentials to version control.**
+- Pre-signed S3 URLs are secure and time-limited.
+
+---
+
+## Troubleshooting S3 Downloads
+- If S3 downloads do not work, check your AWS bucket permissions and CORS settings.
+- The frontend does not need to fetch S3 files as blobs—just open the URL returned by the backend.
+
+---
+
+## Migration
+- Old reports can be migrated to S3 if needed. Contact your developer for a migration script.
 
 ## Usage
 

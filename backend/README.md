@@ -27,16 +27,18 @@ A comprehensive brain tumor detection system with AI-powered analysis, cloud sto
 - **Multi-image batch processing**
 
 ### ☁️ Cloud Integration
-- **Cloudinary CDN** for image storage and delivery
+- **Cloudinary CDN** for image storage and delivery (scans only)
+- **Amazon S3** for PDF report storage and secure delivery
 - **Automatic image optimization** and transformation
 - **Global edge locations** for fast loading
 - **Secure file access** with permissions
 
-### 📊 Report Generation
+## 📊 Report Generation
 - **Automated PDF reports** with patient information
 - **Visual analysis results** with heatmaps
 - **Statistical summaries** of scan results
 - **Professional formatting** with branding
+- **Stored in Amazon S3 for secure, scalable access**
 
 ### 🔐 Security & Authentication
 - **Admin portal** with secure login
@@ -75,7 +77,8 @@ Backend/
 ### Prerequisites
 - Python 3.8+
 - PostgreSQL database
-- Cloudinary account
+- Cloudinary account (for scans)
+- **AWS S3 bucket and credentials (for reports)**
 - SMTP email service
 
 ### Installation Steps
@@ -89,6 +92,7 @@ cd fyp-demo/backend
 2. **Install dependencies**
 ```bash
 pip install -r requirements.txt
+# requirements.txt now includes boto3 for S3 integration
 ```
 
 3. **Configure environment**
@@ -134,6 +138,12 @@ SMTP_PASSWORD=your-app-password
 # Application Settings
 REPORT_FOLDER=reports
 MAX_CONTENT_LENGTH=16777216
+
+# AWS S3 Configuration
+AWS_ACCESS_KEY_ID=your-access-key
+AWS_SECRET_ACCESS_KEY=your-secret-key
+AWS_REGION=us-east-1
+AWS_S3_BUCKET=your-bucket-name
 ```
 
 ### Base URL
@@ -265,6 +275,28 @@ patient_id: number
 file: image file (PNG, JPG, JPEG)
 ```
 
+### New/Updated Endpoints
+
+#### Download Report by Filename (S3-aware)
+```http
+GET /api/report/download-by-filename/{filename}
+```
+- Returns `{ success: true, download_url: <pre-signed S3 URL> }` if report is in S3.
+- Returns `{ success: true, download_url: <local path> }` for legacy local files.
+- Returns error if not found.
+
+---
+
+## 🔒 Security Note
+- **Never commit AWS credentials to version control.**
+- Use IAM users with minimal permissions for production.
+- Pre-signed URLs are time-limited and secure for downloads.
+
+---
+
+## 🛠️ Migration
+- Old reports can be migrated to S3 if needed. Contact your developer for a migration script.
+
 ---
 
 ## 📁 Storage Strategy
@@ -277,15 +309,15 @@ brain_tumor_scans/
 └── overlay/      # Overlay visualization images
 ```
 
-### Local Storage (PDFs)
+### Amazon S3 (PDF Reports)
 ```
 reports/
-└── PDF reports (served via Flask)
+└── PDF reports (served via pre-signed S3 URLs)
 ```
 
 ### Benefits
-- **Images**: Fast CDN delivery, automatic optimization
-- **PDFs**: Reliable local storage, secure serving
+- **Images**: Fast CDN delivery, automatic optimization (Cloudinary)
+- **PDFs**: Reliable, scalable, secure storage and delivery (S3)
 - **Hybrid approach**: Best of both worlds
 
 ---
@@ -315,8 +347,8 @@ reports/
 - `id` (Primary Key)
 - `patient_id` (Foreign Key)
 - `report_id` (Unique identifier)
-- `report_path`, `scan_count`
-- `tumor_count`, `no_tumor_count`
+- `report_path` (**S3 key** or legacy local path)
+- `scan_count`, `tumor_count`, `no_tumor_count`
 - `created_at`
 
 #### `admins`

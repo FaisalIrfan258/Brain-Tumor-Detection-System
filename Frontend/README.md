@@ -562,3 +562,35 @@ NEXT_PUBLIC_API_URL=https://your-api-domain.com/api
 ## 📄 License
 
 This project is licensed under the MIT License.
+
+## ☁️ Cloud Integration
+- **Cloudinary** for scan images
+- **Amazon S3** for PDF report storage and secure download
+
+## 📊 Report Generation & Download
+- PDF reports are now stored in Amazon S3
+- The backend returns a pre-signed S3 URL for each report download
+- The frontend automatically opens/downloads the S3 URL for the user
+
+---
+
+## 📡 API Documentation
+
+### Download Report by Filename (S3-aware)
+```http
+GET /api/report/download-by-filename/{filename}
+```
+- Returns `{ success: true, download_url: <pre-signed S3 URL> }` if report is in S3.
+- The frontend will open/download this URL directly.
+
+---
+
+## 🔒 Security Note
+- **Never commit AWS credentials to version control.**
+- Pre-signed S3 URLs are secure and time-limited.
+
+---
+
+## 🛠️ Troubleshooting
+- If S3 downloads do not work, check your AWS bucket permissions and CORS settings.
+- The frontend does not need to fetch S3 files as blobs—just open the URL returned by the backend.
