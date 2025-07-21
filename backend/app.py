@@ -31,6 +31,7 @@ from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image as RLImage, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
+from s3_service import s3_service
 
 load_dotenv('config.env')
 
@@ -189,7 +190,7 @@ def send_credentials_email(email, username, password, patient_name):
         
         Please keep these credentials safe and do not share them with anyone.
         
-        You can access your portal at: http://localhost:3000/patient-login
+        You can access your portal at: https://brainscanx.vercel.app/patient/login
         
         Best regards,
         Brain Tumor Detection System Team
@@ -364,14 +365,27 @@ def generate_pdf_report(patient_info, scans_data):
         # Count tumor and no tumor cases
         tumor_count = sum(1 for s in scans_data if s.get('prediction') == 'Tumor')
         no_tumor_count = sum(1 for s in scans_data if s.get('prediction') == 'No Tumor')
+        error_count = sum(1 for s in scans_data if s.get('success') is False)
         
         summary_text = f"""
         Total images analyzed: {len(scans_data)}<br/>
         Images with tumor detected: {tumor_count}<br/>
         Images with no tumor detected: {no_tumor_count}<br/>
+        Images with processing errors: {error_count}<br/>
         """
         
         elements.append(Paragraph(summary_text, styles['Normal']))
+        elements.append(Spacer(1, 0.25*inch))
+        
+        # Add image explanation section
+        elements.append(Paragraph("Image Explanation:", styles['Heading2']))
+        elements.append(Spacer(1, 0.1*inch))
+        explanation = (
+            "<b>Original Scan:</b> The original brain scan image<br/>"
+            "<b>GradCAM Heatmap:</b> Areas in red/yellow show regions the AI model focused on when making its decision<br/>"
+            "<b>Overlay Visualization:</b> Combined view showing the original image with the attention heatmap overlaid"
+        )
+        elements.append(Paragraph(explanation, styles['Normal']))
         elements.append(Spacer(1, 0.25*inch))
         
         # Add detailed results for each scan
@@ -380,42 +394,46 @@ def generate_pdf_report(patient_info, scans_data):
         
         for i, scan in enumerate(scans_data):
             elements.append(Paragraph(f"Scan {i+1}: {scan.get('original_filename', 'Unknown')}", styles['Heading3']))
-            
+            # Only show human-friendly details
             prediction = scan.get('prediction', 'Unknown')
             confidence = scan.get('confidence', 'N/A')
             probability = scan.get('probability', 'N/A')
-            
-            elements.append(Paragraph(f"Prediction: <font color={'red' if prediction == 'Tumor' else 'green'}>{prediction}</font>", styles['Normal']))
-            elements.append(Paragraph(f"Confidence: {confidence}", styles['Normal']))
-            elements.append(Paragraph(f"Probability: {probability}", styles['Normal']))
+            scan_details = [
+                ["Prediction:", f"<font color={'red' if prediction == 'Tumor' else 'green'}>{prediction}</font>"],
+                ["Confidence:", str(confidence)],
+                ["Probability:", str(probability)]
+            ]
+            scan_table = Table(scan_details, colWidths=[1.7*inch, 4*inch])
+            scan_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (0, -1), colors.whitesmoke),
+                ('TEXTCOLOR', (0, 0), (0, -1), colors.black),
+                ('ALIGN', (0, 0), (0, -1), 'RIGHT'),
+                ('ALIGN', (1, 0), (1, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (0, -1), 'Helvetica'),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+                ('BACKGROUND', (1, 0), (1, -1), colors.white),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey)
+            ]))
+            elements.append(scan_table)
             elements.append(Spacer(1, 0.1*inch))
-            
             # Add images if available (now using Cloudinary URLs)
             if scan.get('original_path'):
                 img_width = 2*inch
                 img_height = 2*inch
-                
                 try:
-                    # For Cloudinary URLs, we need to download them temporarily
                     import requests
                     from io import BytesIO
-                    
-                    # Download images from Cloudinary
                     original_response = requests.get(scan['original_path'])
                     heatmap_response = requests.get(scan['heatmap_path'])
                     overlay_response = requests.get(scan['overlay_path'])
-                    
                     if original_response.status_code == 200 and heatmap_response.status_code == 200 and overlay_response.status_code == 200:
                         original_img = RLImage(BytesIO(original_response.content), width=img_width, height=img_height)
                         heatmap_img = RLImage(BytesIO(heatmap_response.content), width=img_width, height=img_height)
                         overlay_img = RLImage(BytesIO(overlay_response.content), width=img_width, height=img_height)
-                    
-                    # Create table with images
                     image_data = [
                         ["Original Scan", "GradCAM Heatmap", "Overlay Visualization"],
                         [original_img, heatmap_img, overlay_img]
                     ]
-                    
                     image_table = Table(image_data, colWidths=[2.1*inch, 2.1*inch, 2.1*inch])
                     image_table.setStyle(TableStyle([
                         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
@@ -425,29 +443,23 @@ def generate_pdf_report(patient_info, scans_data):
                         ('GRID', (0, 0), (-1, -1), 1, colors.black),
                         ('BOTTOMPADDING', (0, 0), (-1, 0), 6),
                     ]))
-                    
                     elements.append(image_table)
                 except Exception as e:
                     elements.append(Paragraph(f"Error loading images: {str(e)}", styles['Normal']))
-            
             elements.append(Spacer(1, 0.25*inch))
-        
         # Add disclaimer
         elements.append(Spacer(1, 0.25*inch))
         elements.append(Paragraph("<b>Disclaimer:</b> This report is generated by an AI-based system and is intended for informational purposes only. It should not be considered as a substitute for professional medical advice, diagnosis, or treatment.", styles['Normal']))
-        
         # Build the PDF
         doc.build(elements)
-        
-        # Store PDF locally in reports folder
-        pdf_result = cloudinary_service.upload_pdf(report_path, folder="brain_tumor_reports")
-        
-        if not pdf_result['success']:
-            print(f"Error storing PDF: {pdf_result['error']}")
+        # Upload PDF to S3
+        s3_result = s3_service.upload_pdf(report_path)
+        if s3_result['success']:
+            s3_key = s3_result['s3_key']
+            return s3_key  # Store S3 key in DB as report_path
+        else:
+            print(f"Error uploading PDF to S3: {s3_result['error']}")
             return None
-        
-        return pdf_result['url']
-        
     except Exception as e:
         print(f"Error generating PDF: {str(e)}")
         return None
@@ -997,6 +1009,30 @@ def download_report(report_id):
             'download_url': report['report_path']
         })
         
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/report/download-by-filename/<filename>')
+def download_report_by_filename(filename):
+    """Get report download URL by filename (for user convenience)"""
+    try:
+        # Find any report_path that ends with the filename
+        cursor = db.connection.cursor(cursor_factory=RealDictCursor)
+        cursor.execute("SELECT report_path FROM reports WHERE report_path LIKE %s", (f"%{filename}",))
+        report = cursor.fetchone()
+        cursor.close()
+        if not report:
+            return jsonify({'success': False, 'error': 'Report not found'})
+        report_path = report['report_path']
+        # If the report_path looks like an S3 key, generate a pre-signed URL
+        if report_path.startswith('reports/') or report_path.endswith('.pdf'):
+            s3_url_result = s3_service.generate_presigned_url(report_path)
+            if s3_url_result['success']:
+                return jsonify({'success': True, 'download_url': s3_url_result['url']})
+            else:
+                return jsonify({'success': False, 'error': s3_url_result['error']})
+        # Fallback: if report_path is a local path, serve as before
+        return jsonify({'success': True, 'download_url': report_path})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 

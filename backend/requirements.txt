@@ -12,3 +12,4 @@ werkzeug==2.3.7
 reportlab==4.4.2
 cloudinary==1.36.0
 requests==2.31.0 
+boto3 

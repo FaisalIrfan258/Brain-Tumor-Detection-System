@@ -415,7 +415,49 @@ export default function PatientDetailPage() {
                               <p className="text-sm text-gray-500">Generated: {formatDate(report.created_at)}</p>
                             </div>
                             <a
-                              href={`${process.env.NEXT_PUBLIC_API_URL}/report/download/${report.report_path.split('/').pop()}`}
+                              href="#"
+                              onClick={async (e) => {
+                                e.preventDefault();
+                                let baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+                                if (baseUrl.endsWith('/api/')) baseUrl = baseUrl.slice(0, -4);
+                                else if (baseUrl.endsWith('/api')) baseUrl = baseUrl.slice(0, -3);
+                                if (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
+                                const filename = report.report_path.split('/').pop();
+                                const apiUrl = `${baseUrl}/api/report/download-by-filename/${filename}`;
+                                const response = await fetch(apiUrl);
+                                const data = await response.json();
+                                if (data.success && data.download_url) {
+                                  if (data.download_url.startsWith('http')) {
+                                    const a = document.createElement('a');
+                                    a.href = data.download_url;
+                                    a.target = '_blank';
+                                    a.rel = 'noopener noreferrer';
+                                    a.download = filename;
+                                    document.body.appendChild(a);
+                                    a.click();
+                                    document.body.removeChild(a);
+                                  } else {
+                                    let fileUrl = `${baseUrl}${data.download_url}`;
+                                    fileUrl = fileUrl.replace(/([^:]\/)\/+/, '$1');
+                                    const fileResponse = await fetch(fileUrl);
+                                    if (fileResponse.ok) {
+                                      const blob = await fileResponse.blob();
+                                      const url = window.URL.createObjectURL(blob);
+                                      const a = document.createElement('a');
+                                      a.href = url;
+                                      a.download = filename;
+                                      document.body.appendChild(a);
+                                      a.click();
+                                      window.URL.revokeObjectURL(url);
+                                      document.body.removeChild(a);
+                                    } else {
+                                      alert('Failed to download report file');
+                                    }
+                                  }
+                                } else {
+                                  alert('Report not found');
+                                }
+                              }}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="bg-indigo-600 text-white px-3 py-1 rounded-md hover:bg-indigo-700 text-sm"

@@ -72,53 +72,54 @@ export default function PatientDashboard() {
 
   const handleReportDownload = async (report: any) => {
     try {
-      // Construct the URL properly with special handling for /api/ endpoints
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
-      const reportPath = report.report_path.startsWith('/') ? report.report_path : `/${report.report_path}`
-      
-      let fullUrl: string
-      
-      // Special handling for report URLs to avoid double /api/
-      if (reportPath.startsWith('/api/')) {
-        // If base URL ends with /api, remove it to avoid double /api/api/
-        if (baseUrl.endsWith('/api')) {
-          const cleanBaseUrl = baseUrl.slice(0, -4) // Remove '/api'
-          fullUrl = `${cleanBaseUrl}${reportPath}`
-        } else if (baseUrl.endsWith('/api/')) {
-          const cleanBaseUrl = baseUrl.slice(0, -5) // Remove '/api/'
-          fullUrl = `${cleanBaseUrl}${reportPath}`
+      let baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+      // Remove trailing /api or /api/ if present
+      if (baseUrl.endsWith('/api/')) baseUrl = baseUrl.slice(0, -4);
+      else if (baseUrl.endsWith('/api')) baseUrl = baseUrl.slice(0, -3);
+      // Remove trailing slash if present
+      if (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
+      const filename = report.report_path.split('/').pop();
+      // Always ensure exactly one slash between baseUrl and endpoint
+      const apiUrl = `${baseUrl}/api/report/download-by-filename/${filename}`;
+      const response = await fetch(apiUrl);
+      const data = await response.json();
+      if (data.success && data.download_url) {
+        if (data.download_url.startsWith('http')) {
+          // S3 pre-signed URL: open directly
+          const a = document.createElement('a');
+          a.href = data.download_url;
+          a.target = '_blank';
+          a.rel = 'noopener noreferrer';
+          a.download = filename;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
         } else {
-          const cleanBaseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl
-          fullUrl = `${cleanBaseUrl}${reportPath}`
+          // Local file fallback
+          let fileUrl = `${baseUrl}${data.download_url}`;
+          fileUrl = fileUrl.replace(/([^:]\/)\/+/, '$1'); // Remove double slashes except after http(s):
+          const fileResponse = await fetch(fileUrl);
+          if (fileResponse.ok) {
+            const blob = await fileResponse.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+          } else {
+            alert('Failed to download report file');
+          }
         }
       } else {
-        // Regular URL construction
-        const cleanBaseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl
-        fullUrl = `${cleanBaseUrl}${reportPath}`
-      }
-      
-      console.log('Downloading report from:', fullUrl)
-      
-      const response = await fetch(fullUrl)
-      
-      if (response.ok) {
-        const blob = await response.blob()
-        const url = window.URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `report_${report.id}.pdf`
-        document.body.appendChild(a)
-        a.click()
-        window.URL.revokeObjectURL(url)
-        document.body.removeChild(a)
-      } else {
-        alert('Failed to download report')
+        alert('Report not found');
       }
     } catch (error) {
-      console.error('Error downloading report:', error)
-      alert('Error downloading report')
+      alert('Error downloading report');
     }
-  }
+  };
 
   if (loading) {
     return (
