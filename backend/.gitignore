@@ -173,10 +173,9 @@ fyp/
 uploads/
 
 # Generated reports
-reports/
+
 
 # Model files (if they're large)
-models/*.pth
 models/*.h5
 models/*.pkl
 
