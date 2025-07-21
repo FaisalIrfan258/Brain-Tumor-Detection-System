@@ -508,6 +508,21 @@ class Database:
             print(f"Error getting all reports: {e}")
             return []
     
+    def get_scans_by_ids(self, scan_ids):
+        if not scan_ids:
+            return []
+        try:
+            self.ensure_connection()
+            cursor = self.connection.cursor(cursor_factory=RealDictCursor)
+            format_strings = ','.join(['%s'] * len(scan_ids))
+            cursor.execute(f"SELECT * FROM scans WHERE scan_id IN ({format_strings})", tuple(scan_ids))
+            rows = cursor.fetchall()
+            cursor.close()
+            return rows
+        except Exception as e:
+            print(f"Error getting scans by IDs: {e}")
+            return []
+    
     def close(self):
         """Close database connection"""
         if self.connection:

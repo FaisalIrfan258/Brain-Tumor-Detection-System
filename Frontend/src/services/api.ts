@@ -144,7 +144,8 @@ export interface UploadScanResponse {
 }
 
 export interface GenerateReportRequest {
-  patient_id: number
+  patient_id: number | string;
+  scan_ids?: string[];
 }
 
 export interface GenerateReportResponse {

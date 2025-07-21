@@ -28,6 +28,7 @@ export default function UploadScansPage() {
   const [showResults, setShowResults] = useState(false)
   const [reportGenerated, setReportGenerated] = useState(false)
   const [reportData, setReportData] = useState<any>(null)
+  const [generatingReport, setGeneratingReport] = useState(false);
   const router = useRouter()
 
   useEffect(() => {
@@ -66,10 +67,27 @@ export default function UploadScansPage() {
         setResults(response.results)
         setShowResults(true)
         
-        // Check if report was generated
+        // If report was generated in upload response, use it
         if (response.report_generated && response.report_data) {
           setReportGenerated(true)
           setReportData(response.report_data)
+        } else {
+          // Otherwise, trigger report generation now
+          setGeneratingReport(true);
+          const reportResp = await apiService.generateReport({ patient_id: selectedPatient, scan_ids: response.scan_ids });
+          setGeneratingReport(false);
+          if (reportResp.success && reportResp.data) {
+            setReportGenerated(true);
+            setReportData({
+              report_id: reportResp.data.report_id,
+              report_url: reportResp.data.report_path,
+              // Optionally, fetch scan/tumor counts if needed
+            });
+          } else {
+            setReportGenerated(false);
+            setReportData(null);
+            setError('Failed to generate report after scan upload.');
+          }
         }
       } else {
         setError('Upload failed')
@@ -231,7 +249,13 @@ export default function UploadScansPage() {
           ) : (
             <div className="space-y-6">
               {/* Report Download Section */}
-              {reportGenerated && reportData && (
+              {generatingReport && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 text-center">
+                  <div className="text-yellow-400 text-2xl mb-2">⏳</div>
+                  <div className="text-yellow-800">Generating PDF report...</div>
+                </div>
+              )}
+              {reportGenerated && reportData && !generatingReport && (
                 <div className="bg-green-50 border border-green-200 rounded-lg p-6">
                   <div className="flex items-center">
                     <div className="flex-shrink-0">
@@ -240,7 +264,7 @@ export default function UploadScansPage() {
                     <div className="ml-4">
                       <h3 className="text-lg font-medium text-green-800">PDF Report Generated!</h3>
                       <p className="text-green-700 mt-1">
-                        A comprehensive PDF report has been automatically generated for this patient.
+                        A comprehensive PDF report has been generated and attached to this patient.
                         <br />
                         <span className="text-sm">
                           Scans: {reportData.scan_count} | 
