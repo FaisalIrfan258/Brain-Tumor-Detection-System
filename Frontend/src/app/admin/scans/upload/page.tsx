@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { apiService, Patient, UploadScanResponse } from '@/services/api'
+import AdminNavigation from '@/components/AdminNavigation'
 
 interface ScanResult {
   success: boolean
@@ -28,12 +29,26 @@ export default function UploadScansPage() {
   const [showResults, setShowResults] = useState(false)
   const [reportGenerated, setReportGenerated] = useState(false)
   const [reportData, setReportData] = useState<any>(null)
-  const [generatingReport, setGeneratingReport] = useState(false);
+  const [generatingReport, setGeneratingReport] = useState(false)
+  const [mounted, setMounted] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
-    loadPatients()
+    setMounted(true)
   }, [])
+
+  useEffect(() => {
+    if (!mounted) return
+
+    // Check if admin is logged in
+    const isLoggedIn = localStorage.getItem('adminLoggedIn')
+    if (!isLoggedIn) {
+      window.location.href = '/admin/login'
+      return
+    }
+
+    loadPatients()
+  }, [mounted])
 
   const loadPatients = async () => {
     try {
@@ -73,20 +88,19 @@ export default function UploadScansPage() {
           setReportData(response.report_data)
         } else {
           // Otherwise, trigger report generation now
-          setGeneratingReport(true);
-          const reportResp = await apiService.generateReport({ patient_id: selectedPatient, scan_ids: response.scan_ids });
-          setGeneratingReport(false);
+          setGeneratingReport(true)
+          const reportResp = await apiService.generateReport({ patient_id: selectedPatient, scan_ids: response.scan_ids })
+          setGeneratingReport(false)
           if (reportResp.success && reportResp.data) {
-            setReportGenerated(true);
+            setReportGenerated(true)
             setReportData({
               report_id: reportResp.data.report_id,
               report_url: reportResp.data.report_path,
-              // Optionally, fetch scan/tumor counts if needed
-            });
+            })
           } else {
-            setReportGenerated(false);
-            setReportData(null);
-            setError('Failed to generate report after scan upload.');
+            setReportGenerated(false)
+            setReportData(null)
+            setError('Failed to generate report after scan upload.')
           }
         }
       } else {
@@ -136,36 +150,64 @@ export default function UploadScansPage() {
     return `${cleanBaseUrl}${cleanEndpoint}`
   }
 
+  if (!mounted) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="relative">
+            <div className="animate-spin rounded-full h-16 w-16 border-4 border-indigo-200 border-t-indigo-600 mx-auto"></div>
+            <div className="absolute inset-0 rounded-full border-4 border-transparent border-t-purple-600 animate-spin" style={{ animationDirection: 'reverse', animationDuration: '1.5s' }}></div>
+          </div>
+          <p className="mt-6 text-gray-600 text-lg font-medium">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Navigation */}
-      <nav className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex items-center">
-              <Link href="/admin/dashboard" className="text-indigo-600 hover:text-indigo-500 mr-4">
-                ← Back to Dashboard
-              </Link>
-              <h1 className="text-2xl font-bold text-indigo-600">Upload Brain Scans</h1>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
+      <AdminNavigation />
+
+      <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+        <div className="space-y-6">
+          {/* Header Section */}
+          <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-8 shadow-lg border border-gray-200/50">
+            <div className="flex items-center space-x-4">
+              <div className="h-12 w-12 rounded-xl bg-gradient-to-r from-green-500 to-emerald-500 flex items-center justify-center">
+                <svg className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+              </div>
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900">Upload Brain Scans</h2>
+                <p className="text-gray-600 mt-1">Upload and analyze brain MRI scans with advanced AI</p>
+              </div>
             </div>
           </div>
-        </div>
-      </nav>
 
-      <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="px-4 py-6 sm:px-0">
           {!showResults ? (
-            <div className="bg-white shadow rounded-lg">
-              <div className="px-4 py-5 sm:p-6">
-                <h2 className="text-xl font-semibold text-gray-900 mb-6">Upload and Analyze Brain Scans</h2>
+            <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 overflow-hidden">
+              <div className="p-8">
+                <h3 className="text-xl font-semibold text-gray-900 mb-6">Upload and Analyze Brain Scans</h3>
 
+                {/* Error Message */}
                 {error && (
-                  <div className="mb-6 bg-red-50 border border-red-200 rounded-md p-4">
-                    <div className="text-sm text-red-700">{error}</div>
+                  <div className="mb-6 bg-red-50 border border-red-200 rounded-xl p-4">
+                    <div className="flex">
+                      <div className="flex-shrink-0">
+                        <svg className="h-5 w-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                        </svg>
+                      </div>
+                      <div className="ml-3">
+                        <h3 className="text-sm font-medium text-red-800">Error</h3>
+                        <p className="mt-1 text-sm text-red-700">{error}</p>
+                      </div>
+                    </div>
                   </div>
                 )}
 
-                <div className="space-y-6">
+                <div className="space-y-8">
                   {/* Patient Selection */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -174,7 +216,7 @@ export default function UploadScansPage() {
                     <select
                       value={selectedPatient}
                       onChange={(e) => setSelectedPatient(e.target.value)}
-                      className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all duration-200"
                       required
                     >
                       <option value="">Choose a patient...</option>
@@ -191,7 +233,7 @@ export default function UploadScansPage() {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Select Brain Scan Images *
                     </label>
-                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                    <div className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-indigo-400 transition-colors duration-200">
                       <input
                         type="file"
                         multiple
@@ -215,8 +257,8 @@ export default function UploadScansPage() {
                   {/* Selected Files */}
                   {selectedFiles.length > 0 && (
                     <div>
-                      <h3 className="text-sm font-medium text-gray-700 mb-2">Selected Files:</h3>
-                      <div className="bg-gray-50 rounded-md p-4 max-h-48 overflow-y-auto">
+                      <h3 className="text-sm font-medium text-gray-700 mb-3">Selected Files:</h3>
+                      <div className="bg-gray-50 rounded-xl p-4 max-h-48 overflow-y-auto border border-gray-200">
                         {selectedFiles.map((file, index) => (
                           <div key={index} className="flex justify-between items-center py-2 border-b border-gray-200 last:border-b-0">
                             <span className="text-sm text-gray-900">{file.name}</span>
@@ -228,19 +270,34 @@ export default function UploadScansPage() {
                   )}
 
                   {/* Upload Button */}
-                  <div className="flex justify-end space-x-3">
+                  <div className="flex justify-end space-x-4">
                     <button
                       onClick={resetForm}
-                      className="bg-gray-300 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-400"
+                      className="inline-flex items-center space-x-2 bg-gray-600 text-white px-6 py-3 rounded-xl hover:bg-gray-700 transition-all duration-200"
                     >
-                      Reset
+                      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      <span>Reset</span>
                     </button>
                     <button
                       onClick={handleUpload}
                       disabled={loading || !selectedPatient || selectedFiles.length === 0}
-                      className="bg-indigo-600 text-white px-6 py-2 rounded-md hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="inline-flex items-center space-x-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 py-3 rounded-xl hover:from-indigo-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg hover:shadow-xl"
                     >
-                      {loading ? 'Analyzing...' : '🔬 Analyze Brain Scans'}
+                      {loading ? (
+                        <>
+                          <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
+                          <span>Analyzing...</span>
+                        </>
+                      ) : (
+                        <>
+                          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                          </svg>
+                          <span>🔬 Analyze Brain Scans</span>
+                        </>
+                      )}
                     </button>
                   </div>
                 </div>
@@ -250,13 +307,13 @@ export default function UploadScansPage() {
             <div className="space-y-6">
               {/* Report Download Section */}
               {generatingReport && (
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 text-center">
+                <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-6 text-center">
                   <div className="text-yellow-400 text-2xl mb-2">⏳</div>
                   <div className="text-yellow-800">Generating PDF report...</div>
                 </div>
               )}
               {reportGenerated && reportData && !generatingReport && (
-                <div className="bg-green-50 border border-green-200 rounded-lg p-6">
+                <div className="bg-green-50 border border-green-200 rounded-xl p-6">
                   <div className="flex items-center">
                     <div className="flex-shrink-0">
                       <div className="text-green-400 text-2xl">📄</div>
@@ -319,9 +376,12 @@ export default function UploadScansPage() {
                           }}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 text-sm"
+                          className="inline-flex items-center space-x-2 bg-green-600 text-white px-4 py-2 rounded-xl hover:bg-green-700 text-sm transition-all duration-200"
                         >
-                          📥 Download PDF Report
+                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                          <span>📥 Download PDF Report</span>
                         </a>
                       </div>
                     </div>
@@ -330,96 +390,99 @@ export default function UploadScansPage() {
               )}
 
               {/* Results Header */}
-              <div className="bg-white shadow rounded-lg p-6">
+              <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 p-6">
                 <div className="flex justify-between items-center">
                   <h2 className="text-xl font-semibold text-gray-900">Analysis Results</h2>
                   <button
                     onClick={resetForm}
-                    className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700"
+                    className="inline-flex items-center space-x-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-4 py-2 rounded-xl hover:from-indigo-700 hover:to-purple-700 transition-all duration-200"
                   >
-                    🔄 Analyze More Images
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    <span>🔄 Analyze More Images</span>
                   </button>
                 </div>
               </div>
 
               {/* Results */}
               {results.map((result, index) => (
-                <div key={index} className="bg-white shadow rounded-lg overflow-hidden">
+                <div key={index} className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 overflow-hidden">
                   {result.success ? (
-                    <div className="p-6">
-                      <div className="text-center mb-6">
-                        <h3 className="text-2xl font-bold text-gray-900 mb-2">{result.filename}</h3>
-                        <div className={`inline-block px-6 py-3 rounded-full text-lg font-bold ${
+                    <div className="p-8">
+                      <div className="text-center mb-8">
+                        <h3 className="text-2xl font-bold text-gray-900 mb-3">{result.filename}</h3>
+                        <div className={`inline-block px-8 py-4 rounded-full text-xl font-bold ${
                           result.prediction === 'Tumor' 
-                            ? 'bg-red-100 text-red-800' 
-                            : 'bg-green-100 text-green-800'
+                            ? 'bg-red-100 text-red-800 border-2 border-red-200' 
+                            : 'bg-green-100 text-green-800 border-2 border-green-200'
                         }`}>
                           {result.prediction}
                         </div>
-                        <p className="text-gray-600 mt-2">
-                          Confidence: {(result.confidence * 100).toFixed(1)}% | 
-                          Probability: {(result.probability * 100).toFixed(1)}%
+                        <p className="text-gray-600 mt-3 text-lg">
+                          Confidence: <span className="font-semibold">{(result.confidence * 100).toFixed(1)}%</span> | 
+                          Probability: <span className="font-semibold">{(result.probability * 100).toFixed(1)}%</span>
                         </p>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                         {/* Original Image */}
-                        <div className="bg-gray-50 rounded-lg p-4">
-                          <h4 className="text-lg font-semibold text-gray-900 mb-3 text-center">
+                        <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-6 border border-gray-200">
+                          <h4 className="text-lg font-semibold text-gray-900 mb-4 text-center">
                             📷 Original Image
                           </h4>
                           {result.original_image && (
                             <img
                               src={result.original_image}
                               alt="Original brain scan"
-                              className="w-full h-64 object-contain rounded-lg"
+                              className="w-full h-64 object-contain rounded-lg shadow-md"
                             />
                           )}
-                          <p className="text-sm text-gray-600 mt-2 text-center">
+                          <p className="text-sm text-gray-600 mt-3 text-center">
                             The original brain scan image as uploaded.
                           </p>
                         </div>
 
                         {/* GradCAM Heatmap */}
-                        <div className="bg-gray-50 rounded-lg p-4">
-                          <h4 className="text-lg font-semibold text-gray-900 mb-3 text-center">
+                        <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-6 border border-gray-200">
+                          <h4 className="text-lg font-semibold text-gray-900 mb-4 text-center">
                             🔥 GradCAM Heatmap
                           </h4>
                           {result.heatmap && (
                             <img
                               src={result.heatmap}
                               alt="GradCAM heatmap"
-                              className="w-full h-64 object-contain rounded-lg"
+                              className="w-full h-64 object-contain rounded-lg shadow-md"
                             />
                           )}
-                          <p className="text-sm text-gray-600 mt-2 text-center">
+                          <p className="text-sm text-gray-600 mt-3 text-center">
                             Areas in red/yellow show regions the AI focused on.
                           </p>
                         </div>
 
                         {/* Overlay Visualization */}
-                        <div className="bg-gray-50 rounded-lg p-4">
-                          <h4 className="text-lg font-semibold text-gray-900 mb-3 text-center">
+                        <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-6 border border-gray-200">
+                          <h4 className="text-lg font-semibold text-gray-900 mb-4 text-center">
                             🔍 Overlay Visualization
                           </h4>
                           {result.overlay && (
                             <img
                               src={result.overlay}
                               alt="Overlay visualization"
-                              className="w-full h-64 object-contain rounded-lg"
+                              className="w-full h-64 object-contain rounded-lg shadow-md"
                             />
                           )}
-                          <p className="text-sm text-gray-600 mt-2 text-center">
+                          <p className="text-sm text-gray-600 mt-3 text-center">
                             Combined view showing AI's focus areas.
                           </p>
                         </div>
                       </div>
                     </div>
                   ) : (
-                    <div className="p-6">
+                    <div className="p-8">
                       <div className="text-center">
-                        <h3 className="text-xl font-semibold text-gray-900 mb-2">{result.filename}</h3>
-                        <div className="bg-red-100 border border-red-200 rounded-md p-4">
+                        <h3 className="text-xl font-semibold text-gray-900 mb-3">{result.filename}</h3>
+                        <div className="bg-red-100 border border-red-200 rounded-xl p-4">
                           <p className="text-red-700">Error: {result.error}</p>
                         </div>
                       </div>

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { apiService, Patient, Scan, Report } from '../../../services/api'
+import PatientNavigation from '../../../components/PatientNavigation'
 
 export default function PatientDashboard() {
   const [patient, setPatient] = useState<Patient | null>(null)
@@ -12,9 +13,16 @@ export default function PatientDashboard() {
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('overview')
   const [error, setError] = useState('')
+  const [mounted, setMounted] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  useEffect(() => {
+    if (!mounted) return
+
     // Check if patient is logged in
     const patientId = localStorage.getItem('patientId')
     if (!patientId) {
@@ -23,7 +31,7 @@ export default function PatientDashboard() {
     }
 
     loadPatientData(parseInt(patientId))
-  }, [router])
+  }, [router, mounted])
 
   const loadPatientData = async (patientId: number) => {
     try {
@@ -46,12 +54,6 @@ export default function PatientDashboard() {
     } finally {
       setLoading(false)
     }
-  }
-
-  const handleLogout = () => {
-    localStorage.removeItem('patientId')
-    localStorage.removeItem('patientToken')
-    router.push('/patient/login')
   }
 
   const getStatusColor = (prediction: string) => {
@@ -121,12 +123,16 @@ export default function PatientDashboard() {
     }
   };
 
-  if (loading) {
+  if (!mounted || loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading your dashboard...</p>
+          <div className="relative">
+            <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-200 border-t-blue-600 mx-auto"></div>
+            <div className="absolute inset-0 rounded-full border-4 border-transparent border-t-cyan-600 animate-spin" style={{ animationDirection: 'reverse', animationDuration: '1.5s' }}></div>
+          </div>
+          <p className="mt-6 text-gray-600 text-lg font-medium">Loading your dashboard...</p>
+          <p className="mt-2 text-gray-500 text-sm">Fetching your medical data</p>
         </div>
       </div>
     )
@@ -134,15 +140,23 @@ export default function PatientDashboard() {
 
   if (!patient) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center">
         <div className="text-center">
+          <div className="mx-auto h-16 w-16 bg-gradient-to-r from-red-100 to-red-200 rounded-full flex items-center justify-center mb-4">
+            <svg className="h-8 w-8 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+            </svg>
+          </div>
           <h2 className="text-2xl font-bold text-gray-900 mb-4">Patient Not Found</h2>
-          <p className="text-gray-600 mb-4">Unable to load patient information.</p>
+          <p className="text-gray-600 mb-6">Unable to load patient information.</p>
           <button
             onClick={() => router.push('/patient/login')}
-            className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700"
+            className="inline-flex items-center space-x-2 bg-gradient-to-r from-blue-600 to-cyan-600 text-white px-6 py-3 rounded-xl hover:from-blue-700 hover:to-cyan-700 transition-all duration-200"
           >
-            Back to Login
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+            </svg>
+            <span>Back to Login</span>
           </button>
         </div>
       </div>
@@ -150,31 +164,13 @@ export default function PatientDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Navigation */}
-      <nav className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex items-center">
-              <h1 className="text-2xl font-bold text-indigo-600">🧠 Patient Portal</h1>
-            </div>
-            <div className="flex items-center space-x-4">
-              <span className="text-gray-700">Welcome, {patient.name}</span>
-              <button
-                onClick={handleLogout}
-                className="text-gray-700 hover:text-indigo-600 px-3 py-2 rounded-md text-sm font-medium"
-              >
-                Logout
-              </button>
-            </div>
-          </div>
-        </div>
-      </nav>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
+      <PatientNavigation patientName={patient.name} />
 
       {/* Error Message */}
       {error && (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4">
-          <div className="bg-red-50 border border-red-200 rounded-md p-4">
+          <div className="bg-red-50 border border-red-200 rounded-xl p-4 shadow-sm">
             <div className="flex">
               <div className="flex-shrink-0">
                 <svg className="h-5 w-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -190,261 +186,313 @@ export default function PatientDashboard() {
         </div>
       )}
 
-      {/* Patient Info */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6">
-        <div className="bg-white shadow rounded-lg p-6 mb-6">
-          <div className="flex items-center space-x-4">
-            <div className="flex-shrink-0 h-16 w-16">
-              <div className="h-16 w-16 rounded-full bg-indigo-100 flex items-center justify-center">
-                <span className="text-xl font-medium text-indigo-600">
-                  {patient.name.split(' ').map(n => n[0]).join('')}
-                </span>
+      <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+        <div className="space-y-6">
+          {/* Patient Info Card */}
+          <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 overflow-hidden">
+            <div className="p-8">
+              <div className="flex items-center space-x-6">
+                <div className="flex-shrink-0">
+                  <div className="h-20 w-20 rounded-2xl bg-gradient-to-r from-blue-500 to-cyan-500 flex items-center justify-center shadow-lg">
+                    <span className="text-2xl font-bold text-white">
+                      {patient.name.split(' ').map(n => n[0]).join('')}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex-1">
+                  <h2 className="text-3xl font-bold text-gray-900 mb-2">{patient.name}</h2>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                    <div>
+                      <span className="text-gray-500">Patient ID:</span>
+                      <span className="ml-2 font-medium text-gray-900">{patient.patient_id}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Email:</span>
+                      <span className="ml-2 font-medium text-gray-900">{patient.email}</span>
+                    </div>
+                    {patient.age && (
+                      <div>
+                        <span className="text-gray-500">Age:</span>
+                        <span className="ml-2 font-medium text-gray-900">{patient.age} years</span>
+                      </div>
+                    )}
+                    {patient.gender && (
+                      <div>
+                        <span className="text-gray-500">Gender:</span>
+                        <span className="ml-2 font-medium text-gray-900">{patient.gender}</span>
+                      </div>
+                    )}
+                    {patient.phone && (
+                      <div>
+                        <span className="text-gray-500">Phone:</span>
+                        <span className="ml-2 font-medium text-gray-900">{patient.phone}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
-            </div>
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900">{patient.name}</h2>
-              <p className="text-gray-600">Patient ID: {patient.patient_id}</p>
-              <p className="text-gray-600">{patient.email}</p>
-              {patient.age && <p className="text-gray-600">Age: {patient.age} years</p>}
-              {patient.gender && <p className="text-gray-600">Gender: {patient.gender}</p>}
             </div>
           </div>
-        </div>
-      </div>
 
-      {/* Tabs */}
-      <div className="bg-white border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex space-x-8">
-            <button
-              onClick={() => setActiveTab('overview')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'overview'
-                  ? 'border-indigo-500 text-indigo-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              Overview
-            </button>
-            <button
-              onClick={() => setActiveTab('scans')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'scans'
-                  ? 'border-indigo-500 text-indigo-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              Scans ({scans.length})
-            </button>
-            <button
-              onClick={() => setActiveTab('reports')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'reports'
-                  ? 'border-indigo-500 text-indigo-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              Reports ({reports.length})
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Content */}
-      <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        {activeTab === 'overview' && (
-          <div className="px-4 py-6 sm:px-0">
-            {/* Stats Grid */}
-            <div className="grid grid-cols-1 gap-5 sm:grid-cols-3 mb-8">
-              <div className="bg-white overflow-hidden shadow rounded-lg">
-                <div className="p-5">
-                  <div className="flex items-center">
-                    <div className="flex-shrink-0">
-                      <svg className="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
-                    </div>
-                    <div className="ml-5 w-0 flex-1">
-                      <dl>
-                        <dt className="text-sm font-medium text-gray-500 truncate">Total Scans</dt>
-                        <dd className="text-lg font-medium text-gray-900">{scans.length}</dd>
-                      </dl>
-                    </div>
+          {/* Tabs */}
+          <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 overflow-hidden">
+            <div className="border-b border-gray-200/50">
+              <div className="flex space-x-8 px-8">
+                <button
+                  onClick={() => setActiveTab('overview')}
+                  className={`py-4 px-1 border-b-2 font-medium text-sm transition-all duration-200 ${
+                    activeTab === 'overview'
+                      ? 'border-blue-500 text-blue-600 bg-blue-50/50'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  <div className="flex items-center space-x-2">
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5a2 2 0 012-2h4a2 2 0 012 2v6H8V5z" />
+                    </svg>
+                    <span>Overview</span>
                   </div>
-                </div>
-              </div>
-
-              <div className="bg-white overflow-hidden shadow rounded-lg">
-                <div className="p-5">
-                  <div className="flex items-center">
-                    <div className="flex-shrink-0">
-                      <svg className="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
-                    </div>
-                    <div className="ml-5 w-0 flex-1">
-                      <dl>
-                        <dt className="text-sm font-medium text-gray-500 truncate">Total Reports</dt>
-                        <dd className="text-lg font-medium text-gray-900">{reports.length}</dd>
-                      </dl>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-white overflow-hidden shadow rounded-lg">
-                <div className="p-5">
-                  <div className="flex items-center">
-                    <div className="flex-shrink-0">
-                      <svg className="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                    </div>
-                    <div className="ml-5 w-0 flex-1">
-                      <dl>
-                        <dt className="text-sm font-medium text-gray-500 truncate">Last Scan</dt>
-                        <dd className="text-lg font-medium text-gray-900">
-                          {scans.length > 0 
-                            ? new Date(scans[0].created_at).toLocaleDateString()
-                            : 'No scans yet'
-                          }
-                        </dd>
-                      </dl>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Recent Activity */}
-            <div className="bg-white shadow rounded-lg">
-              <div className="px-4 py-5 sm:p-6">
-                <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">Recent Activity</h3>
-                {scans.length === 0 ? (
-                  <div className="text-center py-8">
-                    <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                </button>
+                <button
+                  onClick={() => setActiveTab('scans')}
+                  className={`py-4 px-1 border-b-2 font-medium text-sm transition-all duration-200 ${
+                    activeTab === 'scans'
+                      ? 'border-blue-500 text-blue-600 bg-blue-50/50'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  <div className="flex items-center space-x-2">
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                     </svg>
-                    <h3 className="mt-2 text-sm font-medium text-gray-900">No scans yet</h3>
-                    <p className="mt-1 text-sm text-gray-500">Your brain scans will appear here once they are uploaded and analyzed.</p>
+                    <span>Scans ({scans.length})</span>
                   </div>
-                ) : (
-                  <div className="space-y-4">
-                    {scans.slice(0, 5).map((scan) => (
-                      <div key={scan.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                        <div className="flex items-center space-x-4">
-                          <div className={`p-2 rounded-full ${getStatusColor(scan.prediction)}`}>
-                            {getStatusIcon(scan.prediction)}
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium text-gray-900">
-                              Scan {scan.scan_id} - {scan.prediction}
-                            </p>
-                            <p className="text-sm text-gray-500">
-                              {new Date(scan.created_at).toLocaleDateString()} • Confidence: {scan.confidence ? (scan.confidence * 100).toFixed(1) : 'N/A'}%
-                            </p>
-                          </div>
-                        </div>
-                        <div className="text-sm text-gray-500">
-                          {scan.confidence ? (scan.confidence * 100).toFixed(1) : 'N/A'}% confidence
-                        </div>
-                      </div>
-                    ))}
+                </button>
+                <button
+                  onClick={() => setActiveTab('reports')}
+                  className={`py-4 px-1 border-b-2 font-medium text-sm transition-all duration-200 ${
+                    activeTab === 'reports'
+                      ? 'border-blue-500 text-blue-600 bg-blue-50/50'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  <div className="flex items-center space-x-2">
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <span>Reports ({reports.length})</span>
                   </div>
-                )}
+                </button>
               </div>
             </div>
-          </div>
-        )}
 
-        {activeTab === 'scans' && (
-          <div className="px-4 py-6 sm:px-0">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">Your Brain Scans</h2>
-            
-            {scans.length === 0 ? (
-              <div className="bg-white shadow rounded-lg p-6 text-center">
-                <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-                <h3 className="mt-2 text-sm font-medium text-gray-900">No scans yet</h3>
-                <p className="mt-1 text-sm text-gray-500">Your brain scans will appear here once they are uploaded and analyzed by our AI system.</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                {scans.map((scan) => (
-                  <div key={scan.id} className="bg-white shadow rounded-lg overflow-hidden">
-                    <div className="p-6">
-                      <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-lg font-medium text-gray-900">Scan {scan.scan_id}</h3>
-                        <div className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(scan.prediction)}`}>
-                          {scan.prediction}
+            {/* Tab Content */}
+            <div className="p-8">
+              {activeTab === 'overview' && (
+                <div className="space-y-8">
+                  {/* Stats Grid */}
+                  <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+                    <div className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-2xl p-6 border border-blue-200/50 hover:shadow-lg transition-all duration-300 group">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-gray-600 mb-1">Total Scans</p>
+                          <p className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-cyan-600 bg-clip-text text-transparent">
+                            {scans.length}
+                          </p>
+                          <p className="text-xs text-gray-500 mt-1">Brain MRI scans</p>
+                        </div>
+                        <div className="h-12 w-12 rounded-xl bg-gradient-to-r from-blue-500 to-cyan-500 flex items-center justify-center group-hover:scale-110 transition-transform duration-200">
+                          <svg className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
                         </div>
                       </div>
-                      
-                      <div className="space-y-3">
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-500">Date:</span>
-                          <span className="text-gray-900">{new Date(scan.created_at).toLocaleDateString()}</span>
+                    </div>
+
+                    <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl p-6 border border-green-200/50 hover:shadow-lg transition-all duration-300 group">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-gray-600 mb-1">Total Reports</p>
+                          <p className="text-3xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">
+                            {reports.length}
+                          </p>
+                          <p className="text-xs text-gray-500 mt-1">PDF reports</p>
                         </div>
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-500">Confidence:</span>
-                          <span className="text-gray-900">{scan.confidence ? (scan.confidence * 100).toFixed(1) : 'N/A'}%</span>
-                        </div>
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-500">Probability:</span>
-                          <span className="text-gray-900">{scan.probability ? scan.probability.toFixed(3) : 'N/A'}</span>
+                        <div className="h-12 w-12 rounded-xl bg-gradient-to-r from-green-500 to-emerald-500 flex items-center justify-center group-hover:scale-110 transition-transform duration-200">
+                          <svg className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
                         </div>
                       </div>
-                      
-                      <div className="mt-4 pt-4 border-t border-gray-200">
-                        <p className="text-sm text-gray-600">
-                          This scan was analyzed using our advanced AI model with GradCAM visualization for explainable results.
-                        </p>
+                    </div>
+
+                    <div className="bg-gradient-to-br from-purple-50 to-indigo-50 rounded-2xl p-6 border border-purple-200/50 hover:shadow-lg transition-all duration-300 group">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-gray-600 mb-1">Last Scan</p>
+                          <p className="text-lg font-bold bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent">
+                            {scans.length > 0 
+                              ? new Date(scans[0].created_at).toLocaleDateString()
+                              : 'No scans yet'
+                            }
+                          </p>
+                          <p className="text-xs text-gray-500 mt-1">Most recent analysis</p>
+                        </div>
+                        <div className="h-12 w-12 rounded-xl bg-gradient-to-r from-purple-500 to-indigo-500 flex items-center justify-center group-hover:scale-110 transition-transform duration-200">
+                          <svg className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </div>
                       </div>
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
 
-        {activeTab === 'reports' && (
-          <div className="px-4 py-6 sm:px-0">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">Your Reports</h2>
-            
-            {reports.length === 0 ? (
-              <div className="bg-white shadow rounded-lg p-6 text-center">
-                <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                <h3 className="mt-2 text-sm font-medium text-gray-900">No reports yet</h3>
-                <p className="mt-1 text-sm text-gray-500">Detailed PDF reports are generated by your healthcare provider after scan analysis.</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {reports.map((report) => (
-                  <div key={report.id} className="bg-white shadow rounded-lg p-6">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h3 className="text-lg font-medium text-gray-900">Report {report.id}</h3>
-                        <p className="text-sm text-gray-500">
-                          Generated on {new Date(report.created_at).toLocaleDateString()}
-                        </p>
+                  {/* Recent Activity */}
+                  <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl p-6 border border-gray-200">
+                    <h3 className="text-xl font-semibold text-gray-900 mb-6">Recent Activity</h3>
+                    {scans.length === 0 ? (
+                      <div className="text-center py-12">
+                        <div className="mx-auto h-16 w-16 bg-gradient-to-r from-gray-100 to-gray-200 rounded-full flex items-center justify-center mb-4">
+                          <svg className="h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                        </div>
+                        <h3 className="text-lg font-semibold text-gray-900 mb-2">No scans yet</h3>
+                        <p className="text-gray-600 max-w-md mx-auto">Your brain scans will appear here once they are uploaded and analyzed by our AI system.</p>
                       </div>
-                      <button
-                        onClick={() => handleReportDownload(report)}
-                        className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 text-sm"
-                      >
-                        Download PDF
-                      </button>
-                    </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {scans.slice(0, 5).map((scan) => (
+                          <div key={scan.id} className="flex items-center justify-between p-4 bg-white rounded-xl border border-gray-200 hover:shadow-md transition-all duration-200">
+                            <div className="flex items-center space-x-4">
+                              <div className={`p-3 rounded-xl ${getStatusColor(scan.prediction)}`}>
+                                {getStatusIcon(scan.prediction)}
+                              </div>
+                              <div>
+                                <p className="text-sm font-semibold text-gray-900">
+                                  Scan {scan.scan_id} - {scan.prediction}
+                                </p>
+                                <p className="text-sm text-gray-500">
+                                  {new Date(scan.created_at).toLocaleDateString()} • Confidence: {scan.confidence ? (scan.confidence * 100).toFixed(1) : 'N/A'}%
+                                </p>
+                              </div>
+                            </div>
+                            <div className="text-sm font-medium text-gray-500">
+                              {scan.confidence ? (scan.confidence * 100).toFixed(1) : 'N/A'}% confidence
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                ))}
-              </div>
-            )}
+                </div>
+              )}
+
+              {activeTab === 'scans' && (
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-2xl font-bold text-gray-900">Your Brain Scans</h2>
+                    <p className="text-gray-600">AI-powered analysis results</p>
+                  </div>
+                  
+                  {scans.length === 0 ? (
+                    <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl p-12 text-center border border-gray-200">
+                      <div className="mx-auto h-16 w-16 bg-gradient-to-r from-gray-100 to-gray-200 rounded-full flex items-center justify-center mb-4">
+                        <svg className="h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                      </div>
+                      <h3 className="text-lg font-semibold text-gray-900 mb-2">No scans yet</h3>
+                      <p className="text-gray-600 max-w-md mx-auto">Your brain scans will appear here once they are uploaded and analyzed by our AI system.</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                      {scans.map((scan) => (
+                        <div key={scan.id} className="bg-gradient-to-br from-white to-gray-50 rounded-2xl shadow-lg border border-gray-200 overflow-hidden hover:shadow-xl transition-all duration-300">
+                          <div className="p-6">
+                            <div className="flex items-center justify-between mb-4">
+                              <h3 className="text-lg font-semibold text-gray-900">Scan {scan.scan_id}</h3>
+                              <div className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(scan.prediction)}`}>
+                                {scan.prediction}
+                              </div>
+                            </div>
+                            
+                            <div className="space-y-3 mb-4">
+                              <div className="flex justify-between text-sm">
+                                <span className="text-gray-500">Date:</span>
+                                <span className="font-medium text-gray-900">{new Date(scan.created_at).toLocaleDateString()}</span>
+                              </div>
+                              <div className="flex justify-between text-sm">
+                                <span className="text-gray-500">Confidence:</span>
+                                <span className="font-medium text-gray-900">{scan.confidence ? (scan.confidence * 100).toFixed(1) : 'N/A'}%</span>
+                              </div>
+                              <div className="flex justify-between text-sm">
+                                <span className="text-gray-500">Probability:</span>
+                                <span className="font-medium text-gray-900">{scan.probability ? scan.probability.toFixed(3) : 'N/A'}</span>
+                              </div>
+                            </div>
+                            
+                            <div className="pt-4 border-t border-gray-200">
+                              <p className="text-sm text-gray-600">
+                                This scan was analyzed using our advanced AI model with GradCAM visualization for explainable results.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {activeTab === 'reports' && (
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-2xl font-bold text-gray-900">Your Reports</h2>
+                    <p className="text-gray-600">Detailed PDF analysis reports</p>
+                  </div>
+                  
+                  {reports.length === 0 ? (
+                    <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl p-12 text-center border border-gray-200">
+                      <div className="mx-auto h-16 w-16 bg-gradient-to-r from-gray-100 to-gray-200 rounded-full flex items-center justify-center mb-4">
+                        <svg className="h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                      </div>
+                      <h3 className="text-lg font-semibold text-gray-900 mb-2">No reports yet</h3>
+                      <p className="text-gray-600 max-w-md mx-auto">Detailed PDF reports are generated by your healthcare provider after scan analysis.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {reports.map((report) => (
+                        <div key={report.id} className="bg-gradient-to-br from-white to-gray-50 rounded-2xl shadow-lg border border-gray-200 p-6 hover:shadow-xl transition-all duration-300">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <h3 className="text-lg font-semibold text-gray-900">Report {report.id}</h3>
+                              <p className="text-sm text-gray-500">
+                                Generated on {new Date(report.created_at).toLocaleDateString()}
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => handleReportDownload(report)}
+                              className="inline-flex items-center space-x-2 bg-gradient-to-r from-blue-600 to-cyan-600 text-white px-4 py-2 rounded-xl hover:from-blue-700 hover:to-cyan-700 transition-all duration-200 shadow-lg hover:shadow-xl"
+                            >
+                              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                              </svg>
+                              <span>Download PDF</span>
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
-        )}
+        </div>
       </div>
     </div>
   )
